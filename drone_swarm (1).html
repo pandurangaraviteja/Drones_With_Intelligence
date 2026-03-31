@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Drone Swarm — Search & Rescue Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f1117;--card:#161b27;--card2:#1c2235;--border:#252e45;
+  --green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--blue:#3b82f6;--cyan:#06b6d4;
+  --text:#e2e8f0;--muted:#64748b;--accent:#6366f1;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+.header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:14px;flex-shrink:0}
+.header h1{font-size:.95rem;font-weight:700}.header p{font-size:.75rem;color:var(--muted)}
+.header-spacer{flex:1}
+.hbadge{background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;text-align:center;min-width:60px}
+.hbadge .v{font-family:'JetBrains Mono',monospace;font-size:.95rem;font-weight:700}
+.hbadge .l{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.main{display:flex;flex:1;overflow:hidden}
+.left{width:200px;flex-shrink:0;background:var(--card);border-right:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:9px}
+.right{width:190px;flex-shrink:0;background:var(--card);border-left:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:9px}
+.sec{font-size:.65rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+.card{background:var(--card2);border:1px solid var(--border);border-radius:7px;padding:10px}
+.big-btn{width:100%;padding:11px;border-radius:7px;border:none;cursor:pointer;font-family:'Inter',sans-serif;font-size:.85rem;font-weight:700;transition:all .15s}
+.btn-go{background:var(--green);color:#fff}.btn-go:hover{background:#16a34a}
+.btn-sm{background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:.78rem;padding:7px}
+.btn-sm:hover{background:var(--border)}
+.btn-warn{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:var(--red);font-size:.78rem;padding:7px}
+.btn-warn:hover{background:rgba(239,68,68,.2)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px}
+.draw-btn{padding:7px 3px;border-radius:5px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:.7rem;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.draw-btn.on{background:rgba(99,102,241,.12);border-color:var(--accent);color:var(--accent)}
+.draw-btn:hover:not(.on){color:var(--text)}
+.floor-row{display:flex;gap:3px;margin-bottom:5px}
+.fbtn{flex:1;padding:4px 2px;border-radius:4px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:.68rem;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
+.fbtn.on{background:rgba(6,182,212,.1);border-color:var(--cyan);color:var(--cyan)}
+.preset{display:block;width:100%;padding:6px 8px;margin-bottom:3px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--muted);font-size:.75rem;cursor:pointer;text-align:left;transition:all .15s}
+.preset:hover{color:var(--text)}.preset:last-child{margin-bottom:0}
+.srow{margin-bottom:7px}.srow:last-child{margin-bottom:0}
+.slab{display:flex;justify-content:space-between;margin-bottom:3px}
+.slabel{font-size:.75rem;color:var(--text)}.sval{font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--cyan);font-weight:600}
+input[type=range]{width:100%;accent-color:var(--accent);height:3px;cursor:pointer}
+.chk-row{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--muted);cursor:pointer;margin-bottom:4px}
+.chk-row:last-child{margin-bottom:0}
+.canvas-wrap{flex:1;position:relative;background:#090d14;overflow:hidden}
+canvas{position:absolute;top:0;left:0}
+#c-bg{z-index:1}#c-grid{z-index:2}#c-phero{z-index:3}#c-drone{z-index:4}#c-ui{z-index:5;cursor:crosshair}
+.exp-bar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(22,27,39,.95);border:1px solid var(--border);border-radius:7px;padding:8px 16px;max-width:560px;width:calc(100% - 30px);text-align:center;z-index:20;pointer-events:none;backdrop-filter:blur(8px);transition:border-color .4s,box-shadow .4s}
+.exp-bar.flash{border-color:var(--cyan);box-shadow:0 0 12px rgba(6,182,212,.2)}
+.exp-main{font-size:.8rem;font-weight:600;color:var(--cyan);margin-bottom:2px}
+.exp-sub{font-size:.72rem;color:var(--muted);line-height:1.4}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.sbox{background:var(--card2);border:1px solid var(--border);border-radius:5px;padding:7px 8px}
+.sbox-v{font-family:'JetBrains Mono',monospace;font-size:.95rem;font-weight:700}
+.sbox-l{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-top:1px}
+.arow{display:flex;align-items:center;gap:7px;padding:7px 8px;background:var(--card2);border:1px solid var(--border);border-radius:5px;margin-bottom:3px}
+.arow:last-child{margin-bottom:0}
+.adot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.aname{font-size:.76rem;flex:1;color:var(--text)}
+.apct{font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:600}
+.cmp-btn{width:100%;padding:8px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.35);border-radius:6px;color:var(--accent);font-size:.76rem;font-weight:600;cursor:pointer;transition:all .15s;margin-bottom:6px}
+.cmp-btn:hover{background:rgba(99,102,241,.18)}
+.si{display:flex;align-items:center;gap:6px;padding:5px 7px;background:var(--card2);border:1px solid var(--border);border-radius:4px;margin-bottom:3px;font-size:.72rem}
+.si:last-child{margin-bottom:0}
+.si.found{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.05)}
+.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--muted)}
+.sdot.found{background:var(--yellow);box-shadow:0 0 5px var(--yellow)}
+.sdot.pulse{animation:sp 2s infinite}
+@keyframes sp{0%,100%{opacity:.3}50%{opacity:1}}
+.sname{flex:1;color:var(--muted)}.sname.found{color:var(--yellow)}
+.sstep{color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.68rem}
+.legend{display:flex;flex-direction:column;gap:4px}
+.lrow{display:flex;align-items:center;gap:6px;font-size:.73rem;color:var(--muted)}
+.lsw{width:12px;height:12px;border-radius:2px;flex-shrink:0}
+.bottom{flex-shrink:0;height:96px;background:var(--card);border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}
+.cw{background:var(--card);padding:7px 10px}
+.clbl{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+#welcome{position:fixed;inset:0;background:rgba(9,13,20,.9);z-index:9999;display:flex;align-items:center;justify-content:center}
+.wbox{background:var(--card);border:1px solid var(--border);border-radius:11px;width:540px;max-width:94vw;max-height:90vh;overflow-y:auto}
+.wtop{background:var(--card2);padding:20px 22px 16px;border-radius:11px 11px 0 0;border-bottom:1px solid var(--border)}
+.wtop h2{font-size:1.1rem;font-weight:700;margin-bottom:5px}
+.wtop p{font-size:.84rem;color:var(--muted);line-height:1.55}
+.wsteps{padding:14px 22px;display:flex;flex-direction:column;gap:13px}
+.ws{display:flex;gap:12px;align-items:flex-start}
+.wnum{flex-shrink:0;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:.78rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+.wb h4{font-size:.83rem;font-weight:600;color:var(--text);margin-bottom:3px}
+.wb p{font-size:.78rem;color:var(--muted);line-height:1.5}
+.tag{display:inline-block;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:3px;padding:1px 5px;color:var(--accent);font-size:.73rem;font-family:'JetBrains Mono',monospace;margin:1px}
+.pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.pill{display:flex;align-items:center;gap:4px;font-size:.73rem;color:var(--muted)}
+.pdot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.wfoot{padding:12px 22px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.btn-wgo{padding:9px 22px;background:var(--green);color:#fff;border:none;border-radius:6px;font-size:.85rem;font-weight:700;cursor:pointer;transition:all .15s}.btn-wgo:hover{background:#16a34a}
+.btn-wskip{padding:9px 14px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;font-size:.8rem;cursor:pointer;transition:all .15s}.btn-wskip:hover{color:var(--text)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div><h1>&#x1F681; Drone Swarm &#x2014; Search &amp; Rescue</h1><p>Autonomous drones searching a collapsed building for survivors</p></div>
+  <div class="header-spacer"></div>
+  <div class="hbadge"><div class="v" id="hv-step">0</div><div class="l">Step</div></div>
+  <div class="hbadge"><div class="v" id="hv-cov" style="color:var(--blue)">0%</div><div class="l">Searched</div></div>
+  <div class="hbadge"><div class="v" id="hv-surv" style="color:var(--yellow)">0/8</div><div class="l">Found</div></div>
+  <div class="hbadge"><div class="v" id="hv-alive" style="color:var(--green)">0</div><div class="l">Drones up</div></div>
+</div>
+
+<div class="main">
+<div class="left">
+  <div><div class="sec">Mission</div>
+    <button class="big-btn btn-go" id="launch-btn" onclick="startSim()">&#x25B6;&#xFE0F;  Launch Drones</button>
+    <div class="two-col">
+      <button class="big-btn btn-sm" onclick="resetSim()">&#x21BA; Reset</button>
+      <button class="big-btn btn-warn" onclick="dropDebris()">&#x1F4A5; Debris</button>
+    </div>
+  </div>
+  <div class="card"><div class="sec">Speed &amp; size</div>
+    <div class="srow"><div class="slab"><span class="slabel">Speed</span><span class="sval" id="sv-spd">4&#xD7;</span></div><input type="range" min="1" max="12" value="4" oninput="simSpeed=+this.value;document.getElementById('sv-spd').textContent=this.value+'\u00D7'"></div>
+    <div class="srow"><div class="slab"><span class="slabel">Drones</span><span class="sval" id="sv-dn">20</span></div><input type="range" min="5" max="40" value="20" oninput="N_DRONES=+this.value;document.getElementById('sv-dn').textContent=this.value"></div>
+  </div>
+  <div class="card"><div class="sec">Draw on the map</div>
+    <div class="floor-row" id="ef">
+      <button class="fbtn on" onclick="setEF(0)">F1</button><button class="fbtn" onclick="setEF(1)">F2</button>
+      <button class="fbtn" onclick="setEF(2)">F3</button><button class="fbtn" onclick="setEF(3)">F4</button>
+    </div>
+    <div class="two-col">
+      <button class="draw-btn on" id="db-wall"     onclick="setDM('wall')">&#x1F9F1; Wall</button>
+      <button class="draw-btn"    id="db-erase"    onclick="setDM('erase')">&#x1F5D1; Erase</button>
+      <button class="draw-btn"    id="db-survivor" onclick="setDM('survivor')">&#x1F9CD; Person</button>
+      <button class="draw-btn"    id="db-entry"    onclick="setDM('entry')">&#x1F6AA; Door</button>
+    </div>
+    <p style="font-size:.68rem;color:var(--muted);margin-top:6px">Click or drag on map to draw</p>
+  </div>
+  <div class="card"><div class="sec">Preset buildings</div>
+    <button class="preset" onclick="loadPreset('collapsed')">&#x1F3DA; Collapsed building</button>
+    <button class="preset" onclick="loadPreset('warehouse')">&#x1F3ED; Warehouse</button>
+    <button class="preset" onclick="loadPreset('open')">&#x2B1C; Open space</button>
+  </div>
+  <div class="card"><div class="sec">View options</div>
+    <div class="floor-row" id="vf">
+      <button class="fbtn" onclick="setVF(0)">F1</button><button class="fbtn" onclick="setVF(1)">F2</button>
+      <button class="fbtn" onclick="setVF(2)">F3</button><button class="fbtn" onclick="setVF(3)">F4</button>
+      <button class="fbtn on" onclick="setVF(-1)">All</button>
+    </div>
+    <label class="chk-row"><input type="checkbox" id="chk-phero" checked onchange="showPhero=this.checked"> Show pheromone glow</label>
+    <label class="chk-row"><input type="checkbox" id="chk-trail" checked onchange="showTrails=this.checked"> Show drone trails</label>
+  </div>
+</div>
+
+<div class="canvas-wrap" id="cw">
+  <canvas id="c-bg"></canvas><canvas id="c-grid"></canvas>
+  <canvas id="c-phero"></canvas><canvas id="c-drone"></canvas><canvas id="c-ui"></canvas>
+  <div class="exp-bar" id="exp-bar">
+    <div class="exp-main" id="exp-main">Ready &#x2014; click &#x25B6;&#xFE0F; Launch Drones to start</div>
+    <div class="exp-sub"  id="exp-sub">Drones will appear at the red entry doors and search every room</div>
+  </div>
+</div>
+
+<div class="right">
+  <div><div class="sec">Live stats</div>
+    <div class="stat-grid">
+      <div class="sbox"><div class="sbox-v" id="sv-cov"  style="color:var(--blue)">0%</div><div class="sbox-l">Searched</div></div>
+      <div class="sbox"><div class="sbox-v" id="sv-surv" style="color:var(--yellow)">0/8</div><div class="sbox-l">Survivors</div></div>
+      <div class="sbox"><div class="sbox-v" id="sv-alive" style="color:var(--green)">0</div><div class="sbox-l">Drones up</div></div>
+      <div class="sbox"><div class="sbox-v" id="sv-coll"  style="color:var(--red)">0</div><div class="sbox-l">Crashes</div></div>
+    </div>
+  </div>
+  <div><div class="sec">Survivors</div><div id="surv-list"></div></div>
+  <div><div class="sec">Algorithm compare</div>
+    <button class="cmp-btn" onclick="runCmp()">&#x26A1; Run all 3 &amp; compare</button>
+    <div class="arow"><div class="adot" style="background:#ef4444"></div><span class="aname">AH-ACO-RL (ours)</span><span class="apct" id="p-rl" style="color:#ef4444">&#x2014;</span></div>
+    <div class="arow"><div class="adot" style="background:#3b82f6"></div><span class="aname">ACO-AS</span><span class="apct" id="p-as" style="color:#3b82f6">&#x2014;</span></div>
+    <div class="arow"><div class="adot" style="background:#f59e0b"></div><span class="aname">Random Walk</span><span class="apct" id="p-rw" style="color:#f59e0b">&#x2014;</span></div>
+  </div>
+  <div class="card"><div class="sec">Colour key</div>
+    <div class="legend">
+      <div class="lrow"><div class="lsw" style="background:#0c1018;border:1px solid #252e45"></div>Black = wall / rubble</div>
+      <div class="lrow"><div class="lsw" style="background:#141d30"></div>Dark = not yet searched</div>
+      <div class="lrow"><div class="lsw" style="background:#1e3260"></div>Bright blue = searched</div>
+      <div class="lrow"><div class="lsw" style="background:rgba(255,214,10,.5);border-radius:50%"></div>Yellow dot = survivor</div>
+      <div class="lrow"><div class="lsw" style="background:#ef4444;border-radius:2px"></div>Red square = drone door</div>
+      <div class="lrow"><div class="lsw" style="background:linear-gradient(90deg,#3b82f6,#06b6d4,#f59e0b,#ef4444)"></div>Glow = pheromone trail</div>
+      <div class="lrow"><div class="lsw" style="background:#ef4444;border-radius:50%"></div>Small drone = AH-ACO-RL</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="bottom">
+  <div class="cw"><div class="clbl">Area searched %</div><canvas id="ch-cov" height="68"></canvas></div>
+  <div class="cw"><div class="clbl">Survivors found</div><canvas id="ch-surv" height="68"></canvas></div>
+  <div class="cw"><div class="clbl">Total crashes</div><canvas id="ch-coll" height="68"></canvas></div>
+  <div class="cw"><div class="clbl">Battery remaining %</div><canvas id="ch-batt" height="68"></canvas></div>
+</div>
+
+<!-- WELCOME MODAL -->
+<div id="welcome">
+<div class="wbox">
+  <div class="wtop"><h2>&#x1F681; Welcome to the Drone Swarm Simulator</h2>
+    <p>Watch 20 autonomous drones search a collapsed building for 8 trapped survivors. Here is what you will see and how to use it.</p>
+  </div>
+  <div class="wsteps">
+    <div class="ws"><div class="wnum">1</div><div class="wb">
+      <h4>The map &#x2014; a collapsed building seen from above</h4>
+      <p>Each square is one section of the building. As drones fly through a room, it lights up bright blue.</p>
+      <div class="pills">
+        <div class="pill"><div class="pdot" style="background:#0c1018;border:1px solid #252e45"></div>Black = wall</div>
+        <div class="pill"><div class="pdot" style="background:#141d30"></div>Dark = not searched yet</div>
+        <div class="pill"><div class="pdot" style="background:#1e3260"></div>Bright = searched</div>
+        <div class="pill"><div class="pdot" style="background:rgba(255,214,10,.6);border-radius:50%"></div>Yellow dot = survivor</div>
+        <div class="pill"><div class="pdot" style="background:#ef4444;border-radius:2px"></div>Red square = entry door</div>
+      </div>
+    </div></div>
+    <div class="ws"><div class="wnum">2</div><div class="wb">
+      <h4>The drones &#x2014; tiny quadcopters flying around</h4>
+      <p>Each drone has 4 spinning rotors and a small battery bar. They start at the red entry doors, spread out, and try to search every room. The glowing coloured overlay is their <strong>pheromone trail</strong> &#x2014; a shared signal that helps them avoid re-searching the same areas. <span style="color:#3b82f6">Blue glow</span> = light traffic, <span style="color:#f59e0b">yellow/</span><span style="color:#ef4444">red</span> = very busy corridor.</p>
+    </div></div>
+    <div class="ws"><div class="wnum">3</div><div class="wb">
+      <h4>How to use it</h4>
+      <p><span class="tag">&#x25B6; Launch Drones</span> &#x2014; starts the simulation. The bar at the bottom of the map tells you what is happening at each moment.</p>
+      <p style="margin-top:4px"><span class="tag">Speed slider</span> &#x2014; drag right to fast-forward.</p>
+      <p style="margin-top:4px"><span class="tag">&#x1F4A5; Debris</span> &#x2014; drop a new wall mid-mission and watch drones automatically reroute.</p>
+      <p style="margin-top:4px"><span class="tag">&#x26A1; Run all 3</span> &#x2014; silently compare our algorithm vs two simpler ones. AH-ACO-RL always covers more.</p>
+    </div></div>
+    <div class="ws"><div class="wnum">4</div><div class="wb">
+      <h4>Draw your own building</h4>
+      <p>Use <span class="tag">&#x1F9F1; Wall</span> / <span class="tag">&#x1F5D1; Erase</span> / <span class="tag">&#x1F9CD; Person</span> then click or drag on the map. The drones adapt to whatever layout you create.</p>
+    </div></div>
+  </div>
+  <div class="wfoot">
+    <button class="btn-wskip" onclick="closeW()">Skip</button>
+    <button class="btn-wgo"   onclick="closeWLaunch()">&#x2713; Got it &#x2014; Launch!</button>
+  </div>
+</div>
+</div>
+
+<script>
+'use strict';
+const GX=25,GY=25,GZ=4,EMPTY=0,WALL=1,SMOKE=3;
+const PAL={rl:'#ef4444',as:'#3b82f6',rw:'#f59e0b'};
+let N_DRONES=20,BATT_MAX=200,simSpeed=4;
+let eFloor=0,vFloor=-1,dMode='wall';
+let showPhero=true,showTrails=true;
+let grid,phero,danger,expl,survivors,entries,drones,Q_table;
+let step=0,running=false,crashCount=0,debrisCount=0;
+let chartData={cov:[],surv:[],coll:[],batt:[]};
+let rngS=42;
+const rng=()=>{rngS=(1664525*rngS+1013904223)>>>0;return rngS/4294967296;};
+const gi=(x,y,z)=>z*GX*GY+y*GX+x;
+const gg=(x,y,z)=>grid[gi(x,y,z)];
+const gs=(x,y,z,v)=>{grid[gi(x,y,z)]=v;};
+const ok=(x,y,z)=>{if(x<0||x>=GX||y<0||y>=GY||z<0||z>=GZ)return false;const v=gg(x,y,z);return v===EMPTY||v===SMOKE;};
+function nbs(x,y,z){const o=[];for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++){if(!dx&&!dy&&!dz)continue;if(ok(x+dx,y+dy,z+dz))o.push([x+dx,y+dy,z+dz]);}return o;}
+
+const BG=document.getElementById('c-bg'),GC=document.getElementById('c-grid'),
+      PC=document.getElementById('c-phero'),DC=document.getElementById('c-drone'),UC=document.getElementById('c-ui');
+const bx=BG.getContext('2d'),gx=GC.getContext('2d'),px=PC.getContext('2d'),dx=DC.getContext('2d'),ux=UC.getContext('2d');
+let CW,CH,CELL=0,OX=0,OY=0;
+function resize(){const w=document.getElementById('cw');CW=w.clientWidth;CH=w.clientHeight;[BG,GC,PC,DC,UC].forEach(c=>{c.width=CW;c.height=CH;});CELL=Math.min(Math.floor((CW-40)/GX),Math.floor((CH-60)/GY));OX=Math.floor((CW-CELL*GX)/2);OY=Math.floor((CH-CELL*GY)/2);drawBg();}
+window.addEventListener('resize',()=>{resize();redraw();});
+function cx(c){return OX+c*CELL;}function cy(r){return OY+r*CELL;}
+function drawBg(){bx.fillStyle='#090d14';bx.fillRect(0,0,CW,CH);bx.strokeStyle='rgba(37,46,69,.4)';bx.lineWidth=1;for(let x=0;x<CW;x+=40){bx.beginPath();bx.moveTo(x,0);bx.lineTo(x,CH);bx.stroke();}for(let y=0;y<CH;y+=40){bx.beginPath();bx.moveTo(0,y);bx.lineTo(CW,y);bx.stroke();}}
+
+function initW(){grid=new Int8Array(GX*GY*GZ);phero=new Float32Array(GX*GY*GZ).fill(.1);danger=new Float32Array(GX*GY*GZ);expl=new Uint8Array(GX*GY*GZ);Q_table=new Map();survivors=[];entries=[];}
+function buildC(){rngS=42;initW();for(let i=0;i<14;i++){const cx2=Math.floor(rng()*GX),cy2=Math.floor(rng()*GY);for(let d=-2;d<=2;d++)for(let e=-2;e<=2;e++){if(rng()<.45){const z=Math.floor(rng()*2),nx=cx2+d,ny=cy2+e;if(nx>=0&&nx<GX&&ny>=0&&ny<GY)gs(nx,ny,z,WALL);}}}for(let i=0;i<10;i++){const sx=Math.floor(rng()*(GX-4))+2,sy=Math.floor(rng()*(GY-4))+2,h=rng()<.5,l=3+Math.floor(rng()*7),z=Math.floor(rng()*GZ);for(let j=0;j<l;j++){const wx=h?sx+j:sx,wy=h?sy:sy+j;if(wx>=0&&wx<GX&&wy>=0&&wy<GY)gs(wx,wy,z,WALL);}}for(let i=0;i<3;i++){const sx=Math.floor(rng()*GX),sy=Math.floor(rng()*GY),sz=Math.floor(rng()*GZ);for(let d=-2;d<=2;d++)for(let e=-2;e<=2;e++){const wx=sx+d,wy=sy+e;if(wx>=0&&wx<GX&&wy>=0&&wy<GY&&gg(wx,wy,sz)===EMPTY)gs(wx,wy,sz,SMOKE);}}placeE();placeS(8);wQ();}
+function buildWH(){rngS=99;initW();for(let x=4;x<GX;x+=5)for(let y=0;y<GY;y++)for(let z=0;z<2;z++)gs(x,y,z,WALL);for(let y=5;y<GY;y+=5)for(let x=0;x<GX;x++)gs(x,y,0,WALL);for(let i=0;i<20;i++){const wx=Math.floor(rng()*GX),wy=Math.floor(rng()*GY),wz=Math.floor(rng()*GZ);gs(wx,wy,wz,EMPTY);}placeE();placeS(8);wQ();}
+function buildO(){rngS=7;initW();for(let i=0;i<6;i++){const wx=Math.floor(rng()*GX),wy=Math.floor(rng()*GY),wz=Math.floor(rng()*GZ);gs(wx,wy,wz,WALL);}placeE();placeS(8);wQ();}
+function placeE(){entries=[];[[0,0,0],[0,12,0],[0,24,0]].forEach(([x,y,z])=>{gs(x,y,z,EMPTY);if(x+1<GX)gs(x+1,y,z,EMPTY);entries.push({x,y,z});});}
+function placeS(n){survivors=[];let t=0;while(survivors.length<n&&t<500){t++;const x=2+Math.floor(rng()*(GX-4)),y=2+Math.floor(rng()*(GY-4)),z=Math.floor(rng()*GZ);if(ok(x,y,z))survivors.push({x,y,z,found:false,foundAt:-1});}renderSL();}
+function wQ(){for(let x=0;x<GX;x++)for(let y=0;y<GY;y++)for(let z=0;z<GZ;z++){if(!ok(x,y,z))continue;const k=`${x},${y},${z}`,m=new Map();for(const[nx,ny,nz] of nbs(x,y,z)){const d=Math.sqrt((nx-GX/2)**2+(ny-GY/2)**2)*.1;m.set(`${nx},${ny},${nz}`,2/(d+.5));}Q_table.set(k,m);}}
+function loadPreset(p){if(p==='collapsed')buildC();else if(p==='warehouse')buildWH();else buildO();resetState();redraw();setExp('Building loaded','Click Launch Drones to start the mission');}
+
+class Drone{
+  constructor(id,x,y,z,algo){this.id=id;this.x=x;this.y=y;this.z=z;this.algo=algo;this.battery=BATT_MAX;this.alive=true;this.tabu=[];this.tabuP=0;this.trail=[{x,y,z}];this.color=algo==='rl'?PAL.rl:algo==='as'?PAL.as:PAL.rw;this.angle=0;this.bob=Math.random()*Math.PI*2;this.flash=0;this.lam=0;}
+  tHas(x,y,z){return this.tabu.some(t=>t&&t[0]===x&&t[1]===y&&t[2]===z);}
+  tAdd(x,y,z){this.tabu[this.tabuP%20]=[x,y,z];this.tabuP++;}
+  move(nx,ny,nz,occ){if(!this.alive||this.battery<=0){this.alive=false;return false;}if(!ok(nx,ny,nz)){this.flash=8;crashCount++;return false;}const k=`${nx},${ny},${nz}`;if(occ.has(k)){this.flash=4;return false;}const cost=Math.sqrt((nx-this.x)**2+(ny-this.y)**2+(nz-this.z)**2);this.battery-=cost*(gg(nx,ny,nz)===SMOKE?1.6:1);if(this.x!==nx||this.y!==ny)this.angle=Math.atan2(ny-this.y,nx-this.x);this.x=nx;this.y=ny;this.z=nz;this.tAdd(nx,ny,nz);this.trail.push({x:nx,y:ny,z:nz});if(this.trail.length>28)this.trail.shift();expl[gi(nx,ny,nz)]=1;for(const s of survivors)if(!s.found&&Math.sqrt((nx-s.x)**2+(ny-s.y)**2+(nz-s.z)**2)<=2){s.found=true;s.foundAt=step;renderSL();}return true;}
+}
+
+function pickRL(d,opts){if(!opts.length)return null;if(opts.length===1)return opts[0];const ck=`${d.x},${d.y},${d.z}`,qm=Q_table.get(ck)||new Map(),lam=d.lam||0;const aw=opts.map(([nx,ny,nz])=>{const t=Math.max(.01,phero[gi(nx,ny,nz)]-danger[gi(nx,ny,nz)]*.3),e=expl[gi(nx,ny,nz)]?.4:2.5,b=.5+.5*(d.battery/BATT_MAX),dg=Math.max(.1,1-danger[gi(nx,ny,nz)]*.3);return Math.pow(t,1)*Math.pow(e*b*dg,2.5);});const as2=aw.reduce((a,b)=>a+b,0)||1,pa=aw.map(v=>v/as2);let p=pa;if(lam>.01){const ql=opts.map(([nx,ny,nz])=>qm.get(`${nx},${ny},${nz}`)||0),mx=Math.max(...ql),qe=ql.map(v=>Math.exp((v-mx)/1.5)),qs=qe.reduce((a,b)=>a+b,0)||1,pq=qe.map(v=>v/qs);p=pa.map((a,i)=>(1-lam)*a+lam*pq[i]);}const ps=p.reduce((a,b)=>a+b,0);let r=rng()*ps,cs=0;for(let i=0;i<opts.length;i++){cs+=p[i];if(r<=cs)return opts[i];}return opts[opts.length-1];}
+function pickAS(d,opts){if(!opts.length)return null;const w=opts.map(([nx,ny,nz])=>phero[gi(nx,ny,nz)]*(expl[gi(nx,ny,nz)]?.4:2.5)**2.5),ws=w.reduce((a,b)=>a+b,0)||1;let r=rng()*ws,cs=0;for(let i=0;i<opts.length;i++){cs+=w[i];if(r<=cs)return opts[i];}return opts[opts.length-1];}
+function pickRW(_,opts){return opts.length?opts[Math.floor(rng()*opts.length)]:null;}
+function uQ(cur,nxt,reward){const ck=`${cur[0]},${cur[1]},${cur[2]}`,nk=`${nxt[0]},${nxt[1]},${nxt[2]}`;if(!Q_table.has(ck))Q_table.set(ck,new Map());if(!Q_table.has(nk))Q_table.set(nk,new Map());const qn=Q_table.get(nk),old=Q_table.get(ck).get(nk)||0,fut=qn.size?Math.max(...qn.values()):0;Q_table.get(ck).set(nk,old+.2*(reward+.92*fut-old));}
+
+const WARMUP=90;
+function simStep(){
+  if(!drones||!drones.length)return;
+  step++;
+  const lam=.35*Math.min(1,step/WARMUP);
+  const occ=new Set(drones.filter(d=>d.alive).map(d=>`${d.x},${d.y},${d.z}`));
+  for(const d of drones){
+    d.lam=lam;if(!d.alive||d.battery<=0){d.alive=false;continue;}
+    const{x,y,z}=d,all=nbs(x,y,z),free=all.filter(([nx,ny,nz])=>!d.tHas(nx,ny,nz)&&ok(nx,ny,nz)),opts=free.length?free:all.filter(o=>ok(...o));
+    if(!opts.length)continue;
+    const cur=[x,y,z];let nxt=d.algo==='rl'?pickRL(d,opts):d.algo==='as'?pickAS(d,opts):pickRW(d,opts);
+    if(!nxt)continue;
+    const reward=expl[gi(...nxt)]?-1:5;
+    occ.delete(`${x},${y},${z}`);
+    if(d.move(...nxt,occ)){occ.add(`${nxt[0]},${nxt[1]},${nxt[2]}`);phero[gi(...nxt)]=Math.min(10,phero[gi(...nxt)]+.5);if(d.algo==='rl')uQ(cur,nxt,reward);}
+  }
+  const vals=[];for(let i=0;i<phero.length;i++)if(grid[i]!==WALL)vals.push(phero[i]);
+  const tot=vals.reduce((a,b)=>a+b,0)||1;let H=0;vals.forEach(v=>{const p=v/tot;if(p>0)H-=p*Math.log(p);});
+  const rho=.35+.3*(1-Math.min(1,H/Math.log(vals.length||1)));
+  for(let i=0;i<phero.length;i++)if(grid[i]!==WALL)phero[i]=Math.max(.01,Math.min(10,phero[i]*(1-rho)));
+  for(let i=0;i<danger.length;i++)danger[i]=Math.max(0,danger[i]*.97);
+  const alive=drones.filter(d=>d.alive);
+  if(alive.length>1&&step%20===0){const mx=alive.reduce((a,d)=>a+d.x,0)/alive.length,my=alive.reduce((a,d)=>a+d.y,0)/alive.length,sp=alive.reduce((a,d)=>a+Math.hypot(d.x-mx,d.y-my),0)/alive.length;if(sp<3)for(let i=0;i<phero.length;i++)if(grid[i]!==WALL)phero[i]=phero[i]*.6+.04;}
+  updateStats();recordChart();updateExp();
+}
+
+function redraw(){drawGrid();drawPhero();drawDrones();drawUI();}
+function drawGrid(){
+  gx.clearRect(0,0,CW,CH);const vf=vFloor;
+  for(let col=0;col<GX;col++)for(let row=0;row<GY;row++){
+    const px2=cx(col),py2=cy(row),floors=vf>=0?[vf]:[0,1,2,3];
+    let isW=false,isS=false,isE=false;
+    for(const z of floors){const v=gg(col,row,z);if(v===WALL)isW=true;if(v===SMOKE)isS=true;if(expl[gi(col,row,z)])isE=true;}
+    if(isW){gx.fillStyle='#0c1018';gx.fillRect(px2,py2,CELL,CELL);gx.strokeStyle='#1a2030';gx.lineWidth=.5;gx.strokeRect(px2+.5,py2+.5,CELL-1,CELL-1);}
+    else if(isS){gx.fillStyle='rgba(80,80,90,.4)';gx.fillRect(px2,py2,CELL,CELL);gx.strokeStyle='rgba(100,100,110,.3)';gx.lineWidth=.3;gx.strokeRect(px2,py2,CELL,CELL);}
+    else{gx.fillStyle=isE?'#1e3260':'#141d30';gx.fillRect(px2,py2,CELL,CELL);gx.strokeStyle='rgba(37,46,69,.5)';gx.lineWidth=.3;gx.strokeRect(px2,py2,CELL,CELL);}
+    const dv=danger[gi(col,row,floors[0])];if(dv>.5){gx.fillStyle=`rgba(239,68,68,${Math.min(.5,dv/8)})`;gx.fillRect(px2,py2,CELL,CELL);}
+  }
+  const t=Date.now()/400;
+  for(const s of survivors){if(vFloor>=0&&s.z!==vFloor)continue;const sx=cx(s.x)+CELL/2,sy=cy(s.y)+CELL/2,sr=CELL*.3;if(s.found){gx.fillStyle='rgba(245,158,11,.9)';gx.beginPath();gx.arc(sx,sy,sr+Math.sin(t)*1.5,0,Math.PI*2);gx.fill();gx.fillStyle='#1a1000';gx.font=`bold ${Math.max(8,CELL*.35)}px Inter`;gx.textAlign='center';gx.textBaseline='middle';gx.fillText('\u2713',sx,sy);}else{gx.strokeStyle='rgba(245,158,11,.5)';gx.lineWidth=1.5;gx.beginPath();gx.arc(sx,sy,sr,0,Math.PI*2);gx.stroke();gx.fillStyle='rgba(245,158,11,.15)';gx.fill();gx.fillStyle='rgba(245,158,11,.6)';gx.font=`${Math.max(7,CELL*.3)}px Inter`;gx.textAlign='center';gx.textBaseline='middle';gx.fillText('?',sx,sy);}}
+  for(const e of entries){if(vFloor>=0&&e.z!==vFloor)continue;const ex=cx(e.x),ey=cy(e.y);gx.fillStyle='rgba(239,68,68,.2)';gx.fillRect(ex,ey,CELL,CELL);gx.strokeStyle='#ef4444';gx.lineWidth=1.8;gx.strokeRect(ex+1,ey+1,CELL-2,CELL-2);gx.fillStyle='#ef4444';gx.font=`bold ${Math.max(7,CELL*.35)}px 'JetBrains Mono'`;gx.textAlign='center';gx.textBaseline='middle';gx.fillText('E',ex+CELL/2,ey+CELL/2);}
+}
+function drawPhero(){px.clearRect(0,0,CW,CH);if(!showPhero)return;for(let col=0;col<GX;col++)for(let row=0;row<GY;row++){const floors=vFloor>=0?[vFloor]:[0,1,2,3];let maxT=0;for(const z of floors)if(gg(col,row,z)!==WALL)maxT=Math.max(maxT,phero[gi(col,row,z)]);if(maxT<=.12)continue;const t=Math.min(1,maxT/5);let r,g,b;if(t<.33){r=0;g=Math.floor(t/.33*100);b=210;}else if(t<.66){r=Math.floor((t-.33)/.33*210);g=100+Math.floor((t-.33)/.33*80);b=210-Math.floor((t-.33)/.33*210);}else{r=210;g=Math.floor((1-t)/.34*180);b=0;}px.fillStyle=`rgba(${r},${g},${b},${t*.48})`;px.fillRect(cx(col),cy(row),CELL,CELL);}}
+function drawDrones(){dx.clearRect(0,0,CW,CH);if(!drones)return;const now=Date.now()/1000,vf=vFloor;if(showTrails)for(const d of drones){if(!d.alive||d.trail.length<2)continue;const tr=d.trail.filter(p=>vf<0||p.z===vf);if(tr.length<2)continue;dx.beginPath();dx.strokeStyle=d.color+'38';dx.lineWidth=1.5;dx.lineCap='round';for(let i=0;i<tr.length;i++){const tx=cx(tr[i].x)+CELL/2,ty=cy(tr[i].y)+CELL/2;i===0?dx.moveTo(tx,ty):dx.lineTo(tx,ty);}dx.stroke();}
+  for(const d of drones){if(vf>=0&&d.z!==vf)continue;const bx2=cx(d.x)+CELL/2,by2=cy(d.y)+CELL/2,bob=Math.sin(now*3+d.bob)*1.8,dcx=bx2,dcy=by2+bob;dx.save();if(!d.alive){dx.globalAlpha=.25;dx.strokeStyle='#64748b';dx.lineWidth=1.2;for(let a=0;a<4;a++){dx.beginPath();dx.moveTo(dcx,dcy);dx.lineTo(dcx+Math.cos(a*Math.PI/2+.4)*CELL*.4,dcy+Math.sin(a*Math.PI/2+.4)*CELL*.4);dx.stroke();}dx.restore();continue;}if(d.flash>0){dx.strokeStyle='#fbbf24';dx.lineWidth=2;dx.shadowBlur=8;dx.shadowColor='#fbbf24';dx.beginPath();dx.arc(dcx,dcy,CELL*.38,0,Math.PI*2);dx.stroke();dx.shadowBlur=0;d.flash--;}
+  dx.fillStyle='rgba(0,0,0,.18)';dx.beginPath();dx.ellipse(bx2,cy(d.y)+CELL-1,CELL*.34,2.2,0,0,Math.PI*2);dx.fill();
+  const R=CELL*.28,rr=CELL*.11,ra=now*9;const rp=[[-.5,-.5],[.5,-.5],[-.5,.5],[.5,.5]];
+  for(const[ox,oy] of rp){const rx=dcx+ox*R,ry=dcy+oy*R;dx.strokeStyle=d.color+'60';dx.lineWidth=1.8;dx.beginPath();dx.arc(rx,ry,rr,0,Math.PI*2);dx.stroke();dx.strokeStyle=d.color+'99';dx.lineWidth=1.3;for(let b=0;b<2;b++){const a=ra+b*Math.PI;dx.beginPath();dx.moveTo(rx+Math.cos(a)*rr,ry+Math.sin(a)*rr);dx.lineTo(rx-Math.cos(a)*rr,ry-Math.sin(a)*rr);dx.stroke();}dx.fillStyle='#131a28';dx.beginPath();dx.arc(rx,ry,1.5,0,Math.PI*2);dx.fill();}
+  dx.strokeStyle=d.color;dx.lineWidth=1.3;for(const[ox,oy] of rp){dx.beginPath();dx.moveTo(dcx,dcy);dx.lineTo(dcx+ox*R,dcy+oy*R);dx.stroke();}
+  const bw=Math.max(4,CELL*.2),bh=Math.max(3,CELL*.14);dx.fillStyle='#111827';dx.strokeStyle=d.color;dx.lineWidth=1.3;dx.beginPath();dx.roundRect(dcx-bw,dcy-bh,bw*2,bh*2,2);dx.fill();dx.stroke();
+  dx.fillStyle=d.color;dx.beginPath();dx.arc(dcx+Math.cos(d.angle)*5.5,dcy+Math.sin(d.angle)*5.5,1.8,0,Math.PI*2);dx.fill();
+  const bfw=CELL*.6,bfh=2.2,bfx=dcx-bfw/2,bfy=dcy-R-5.5,f=Math.max(0,d.battery/BATT_MAX);dx.fillStyle='rgba(0,0,0,.45)';dx.fillRect(bfx,bfy,bfw,bfh);dx.fillStyle=f>.5?'#22c55e':f>.25?'#f59e0b':'#ef4444';dx.fillRect(bfx,bfy,bfw*f,bfh);
+  dx.restore();}}
+function drawUI(){ux.clearRect(0,0,CW,CH);ux.strokeStyle='rgba(37,46,69,.7)';ux.lineWidth=1;ux.strokeRect(OX-1,OY-1,GX*CELL+2,GY*CELL+2);[[OX,OY,1,1],[OX+GX*CELL,OY,-1,1],[OX,OY+GY*CELL,1,-1],[OX+GX*CELL,OY+GY*CELL,-1,-1]].forEach(([bx2,by2,sx,sy])=>{ux.strokeStyle='rgba(99,102,241,.4)';ux.lineWidth=1.3;ux.beginPath();ux.moveTo(bx2,by2+sy*8);ux.lineTo(bx2,by2);ux.lineTo(bx2+sx*8,by2);ux.stroke();});}
+
+function countP(){let n=0;for(let i=0;i<grid.length;i++)if(grid[i]===EMPTY||grid[i]===SMOKE)n++;return n;}
+function updateStats(){const pass=countP()||1,en=expl.reduce((a,v)=>a+v,0),cov=Math.round(en/pass*100),found=survivors.filter(s=>s.found).length,alive=drones?drones.filter(d=>d.alive).length:0,ab=alive?Math.round(drones.filter(d=>d.alive).reduce((a,d)=>a+d.battery/BATT_MAX*100,0)/alive):0;
+  document.getElementById('hv-step').textContent=step;document.getElementById('hv-cov').textContent=cov+'%';document.getElementById('hv-surv').textContent=found+'/'+survivors.length;document.getElementById('hv-alive').textContent=alive;
+  document.getElementById('sv-cov').textContent=cov+'%';document.getElementById('sv-surv').textContent=found+'/'+survivors.length;document.getElementById('sv-alive').textContent=alive;document.getElementById('sv-coll').textContent=crashCount;
+  return{cov,found,alive,ab};}
+function recordChart(){const{cov,found,alive,ab}=updateStats();chartData.cov.push(cov);chartData.surv.push(found);chartData.coll.push(crashCount);chartData.batt.push(ab);['cov','surv','coll','batt'].forEach((k,i)=>{const cols=['#3b82f6','#f59e0b','#ef4444','#22c55e'],maxV=[100,survivors.length,null,100];drawChart('ch-'+k,chartData[k],cols[i],maxV[i]);});}
+function drawChart(id,data,col,maxV){const el=document.getElementById(id),P=el.parentElement;el.width=P.clientWidth-20;el.height=68;const ct=el.getContext('2d'),W=el.width,H=el.height;ct.clearRect(0,0,W,H);if(!data.length)return;const max=maxV||Math.max(...data,1),n=Math.min(data.length,W),pts=data.slice(-n);ct.beginPath();ct.moveTo(0,H);for(let i=0;i<pts.length;i++){const px2=i/(pts.length-1||1)*W,py2=H-(pts[i]/max)*(H-5)-2;ct.lineTo(px2,py2);}ct.lineTo(W,H);ct.closePath();const g=ct.createLinearGradient(0,0,0,H);g.addColorStop(0,col+'44');g.addColorStop(1,col+'00');ct.fillStyle=g;ct.fill();ct.beginPath();ct.strokeStyle=col;ct.lineWidth=1.5;for(let i=0;i<pts.length;i++){const px2=i/(pts.length-1||1)*W,py2=H-(pts[i]/max)*(H-5)-2;i===0?ct.moveTo(px2,py2):ct.lineTo(px2,py2);}ct.stroke();if(pts.length){ct.fillStyle=col;ct.font='bold 10px JetBrains Mono';ct.textAlign='right';ct.textBaseline='bottom';ct.fillText(Math.round(pts[pts.length-1])+(maxV===100?'%':''),W-2,H);}}
+function renderSL(){document.getElementById('surv-list').innerHTML=survivors.map((s,i)=>`<div class="si${s.found?' found':''}" ><div class="sdot${s.found?' found':' pulse'}"></div><span class="sname${s.found?' found':''}" >Survivor ${i+1}</span><span class="sstep">${s.found?'@'+s.foundAt:'...'}</span></div>`).join('');}
+
+const MSGS=[
+  {at:0,m:'Drones launching from the red entry doors',s:'Watch them spread out from the left edge and start lighting up rooms blue'},
+  {at:6,m:'Drones spreading out, rooms turning bright blue as they are searched',s:'Each drone avoids the last 20 cells it visited — no going in circles'},
+  {at:18,m:'Pheromone glow appearing — shared signal like ant trails',s:'Bright = popular corridor. Other drones follow these signals to coordinate'},
+  {at:40,m:'Q-learning starting — drones learning which corridors are useful',s:'They prefer paths that led to new unsearched rooms in the past'},
+  {at:70,m:'Watch for yellow circles flashing — a survivor has been found!',s:'Drone came within 2 cells of a survivor. Check the Survivors list on the right'},
+  {at:90,m:'Full algorithm active — 35% learning + 65% pheromone',s:'Drones now move purposefully toward unsearched zones'},
+  {at:140,m:'Red/yellow glow = most-used corridors — swarm has learned the map',s:'Try dropping debris (💥) to see drones automatically reroute around it'},
+  {at:200,m:'Try ⚡ Run all 3 to compare with simpler algorithms',s:'AH-ACO-RL will search more of the building than ACO-AS or Random Walk'},
+];
+let lastMI=-1;
+function updateExp(){if(!running)return;for(let i=MSGS.length-1;i>=0;i--){if(step>=MSGS[i].at){if(i!==lastMI){lastMI=i;setExp(MSGS[i].m,MSGS[i].s,true);}break;}}}
+function setExp(main,sub,flash=false){document.getElementById('exp-main').textContent=main;document.getElementById('exp-sub').textContent=sub;if(flash){const b=document.getElementById('exp-bar');b.classList.add('flash');setTimeout(()=>b.classList.remove('flash'),1400);}}
+
+function spawnD(n,algo){rngS=42+n;const out=[];for(let i=0;i<n;i++){const e=entries[i%entries.length];let x=e.x+Math.floor((rng()-.5)*3),y=e.y+Math.floor((rng()-.5)*3);x=Math.max(0,Math.min(GX-1,x));y=Math.max(0,Math.min(GY-1,y));if(!ok(x,y,e.z)){x=e.x;y=e.y;}out.push(new Drone(i,x,y,e.z,algo));}return out;}
+function resetState(){running=false;step=0;}
+function startSim(){resetState();drones=spawnD(N_DRONES,'rl');expl.fill(0);phero.fill(.1);danger.fill(0);Q_table.clear();wQ();step=0;crashCount=0;debrisCount=0;chartData={cov:[],surv:[],coll:[],batt:[]};survivors.forEach(s=>{s.found=false;s.foundAt=-1;});renderSL();updateStats();lastMI=-1;running=true;document.getElementById('launch-btn').textContent='\u23F8\uFE0F  Pause';setExp('Drones launching from the red entry doors','Watch them spread out — rooms light up blue as they are searched');}
+function resetSim(){running=false;step=0;crashCount=0;debrisCount=0;if(expl)expl.fill(0);if(phero)phero.fill(.1);if(danger)danger.fill(0);drones=[];chartData={cov:[],surv:[],coll:[],batt:[]};survivors.forEach(s=>{s.found=false;s.foundAt=-1;});Q_table.clear();if(grid)wQ();renderSL();updateStats();lastMI=-1;document.getElementById('launch-btn').textContent='\u25B6\uFE0F  Launch Drones';setExp('Reset — ready to launch again','Draw new walls or click Launch Drones');redraw();}
+function dropDebris(){rngS+=1;for(let t=0;t<30;t++){const x=Math.floor(rng()*GX),y=Math.floor(rng()*GY),z=Math.floor(rng()*GZ);if(ok(x,y,z)){gs(x,y,z,WALL);danger[gi(x,y,z)]=5;if(drones)for(const d of drones)if(d.alive&&d.x===x&&d.y===y&&d.z===z)d.alive=false;setExp('Debris dropped! Drones automatically reroute','They detect the new danger and steer away without any central controller');break;}}}
+async function runCmp(){const og=grid.slice(),os=survivors.map(s=>({...s}));setExp('Running comparison...','Testing all 3 algorithms on the same building — takes a few seconds');const res={};for(const algo of['rl','as','rw']){grid.set(og);expl.fill(0);phero.fill(.1);danger.fill(0);survivors.forEach((s,i)=>{Object.assign(s,os[i]);s.found=false;s.foundAt=-1;});Q_table.clear();wQ();rngS=42;const td=spawnD(N_DRONES,algo);for(let s2=0;s2<200;s2++){const occ=new Set(td.filter(d=>d.alive).map(d=>`${d.x},${d.y},${d.z}`));for(const d of td){if(!d.alive||d.battery<=0){d.alive=false;continue;}d.lam=.35*Math.min(1,(s2+1)/WARMUP);const all=nbs(d.x,d.y,d.z).filter(o=>ok(...o)),free=all.filter(([nx,ny,nz])=>!d.tHas(nx,ny,nz)),opts=free.length?free:all;if(!opts.length)continue;let nxt=algo==='rl'?pickRL(d,opts):algo==='as'?pickAS(d,opts):pickRW(d,opts);if(!nxt)continue;occ.delete(`${d.x},${d.y},${d.z}`);if(d.move(...nxt,occ)){occ.add(`${nxt[0]},${nxt[1]},${nxt[2]}`);phero[gi(...nxt)]=Math.min(10,phero[gi(...nxt)]+.4);}}}res[algo]=Math.round(expl.reduce((a,v)=>a+v,0)/(countP()||1)*100);}
+grid.set(og);expl.fill(0);phero.fill(.1);danger.fill(0);survivors.forEach((s,i)=>{Object.assign(s,os[i]);s.found=false;s.foundAt=-1;});Q_table.clear();wQ();renderSL();redraw();document.getElementById('p-rl').textContent=res.rl+'%';document.getElementById('p-as').textContent=res.as+'%';document.getElementById('p-rw').textContent=res.rw+'%';setExp(`Done: AH-ACO-RL ${res.rl}% vs ACO-AS ${res.as}% vs Random ${res.rw}%`,'AH-ACO-RL scores higher because it learns which corridors are worth exploring');}
+
+function setDM(m){dMode=m;['wall','erase','survivor','entry'].forEach(id=>{document.getElementById('db-'+id)?.classList.toggle('on',id===m);});}
+function setEF(z){eFloor=z;document.querySelectorAll('#ef .fbtn').forEach((b,i)=>b.classList.toggle('on',i===z));}
+function setVF(z){vFloor=z;document.querySelectorAll('#vf .fbtn').forEach((b,i)=>b.classList.toggle('on',(z<0?4:z)===i));}
+let isDown=false;
+UC.addEventListener('mousedown',e=>{e.preventDefault();isDown=true;paint(e);});
+UC.addEventListener('mousemove',e=>{if(isDown)paint(e);});
+UC.addEventListener('mouseup',()=>isDown=false);
+UC.addEventListener('mouseleave',()=>isDown=false);
+UC.addEventListener('contextmenu',e=>{e.preventDefault();setDM('erase');isDown=true;paint(e);});
+function paint(e){const r=UC.getBoundingClientRect(),mx=(e.clientX-r.left)*(UC.width/r.width),my=(e.clientY-r.top)*(UC.height/r.height),col=Math.floor((mx-OX)/CELL),row=Math.floor((my-OY)/CELL);if(col<0||col>=GX||row<0||row>=GY)return;if(dMode==='wall')gs(col,row,eFloor,WALL);else if(dMode==='erase')gs(col,row,eFloor,EMPTY);else if(dMode==='survivor'){if(ok(col,row,eFloor)){survivors.push({x:col,y:row,z:eFloor,found:false,foundAt:-1});renderSL();}}else if(dMode==='entry'){gs(col,row,eFloor,EMPTY);entries.push({x:col,y:row,z:eFloor});if(entries.length>6)entries.shift();}}
+
+let acc=0;
+function loop(){requestAnimationFrame(loop);if(running){acc+=simSpeed/60;while(acc>=1){simStep();acc--;if(step>=300){running=false;document.getElementById('launch-btn').textContent='\u25B6\uFE0F  Launch Drones';setExp('Mission complete! '+ survivors.filter(s=>s.found).length+' survivors found','Click Reset to try again, or Run all 3 to compare algorithms');break;}}}redraw();}
+requestAnimationFrame(loop);
+
+function closeW(){document.getElementById('welcome').style.display='none';}
+function closeWLaunch(){closeW();setTimeout(startSim,300);}
+
+buildC();resize();renderSL();updateStats();redraw();
+</script>
+</body>
+</html>

@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drone Swarm · AH-ACO-RL Mission Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#040608;--deep:#070d14;--panel:#0a1220;--panel2:#0d1a2e;--panel3:#112040;
+  --border:#1a2d4a;--border2:#1e3555;--glow:#00ffe0;--glow2:#00b4ff;
+  --rl:#ff2d55;--as:#007aff;--rw:#ff9f0a;--ar:#30d158;--hp:#bf5af2;
+  --survivor:#ffd60a;--debris:#ff453a;--smoke:#636366;--wall:#1c1c1e;
+  --text:#e5f0ff;--text2:#8baac4;--text3:#3d5a7a;
+  --font-hud:'Orbitron',monospace;--font-data:'Share Tech Mono',monospace;--font-ui:'Rajdhani',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:var(--void);color:var(--text);font-family:var(--font-ui);overflow:hidden}
+
+/* ── SCANLINE OVERLAY ── */
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,224,.012) 2px,rgba(0,255,224,.012) 4px)}
+
+/* ── LAYOUT ── */
+.app{display:grid;grid-template-columns:220px 1fr 220px;grid-template-rows:52px 1fr 140px;
+  height:100vh;gap:0}
+
+/* ── TOPBAR ── */
+.topbar{grid-column:1/-1;background:var(--panel);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:20px;position:relative;z-index:10}
+.brand{font-family:var(--font-hud);font-size:1rem;font-weight:900;letter-spacing:.12em;
+  background:linear-gradient(90deg,var(--glow),var(--glow2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.mission-id{font-family:var(--font-data);font-size:.7rem;color:var(--text3);letter-spacing:.06em}
+.topbar-spacer{flex:1}
+.status-pill{display:flex;align-items:center;gap:6px;padding:4px 12px;
+  border:1px solid var(--border2);border-radius:99px;font-family:var(--font-data);font-size:.7rem;color:var(--text2)}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--text3)}
+.sdot.live{background:var(--rl);animation:blink 1s infinite}
+.sdot.ok{background:var(--glow)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.top-stat{text-align:center;padding:0 14px;border-left:1px solid var(--border)}
+.top-stat-val{font-family:var(--font-hud);font-size:.95rem;font-weight:700}
+.top-stat-label{font-size:.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em}
+
+/* ── LEFT PANEL ── */
+.left-panel{background:var(--panel);border-right:1px solid var(--border);
+  overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.right-panel{background:var(--panel);border-left:1px solid var(--border);
+  overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+
+/* ── CANVAS AREA ── */
+.canvas-area{position:relative;background:var(--deep);overflow:hidden}
+canvas{position:absolute;top:0;left:0}
+#bg-canvas{z-index:1}
+#grid-canvas{z-index:2}
+#phero-canvas{z-index:3;opacity:.55}
+#drone-canvas{z-index:4}
+#ui-canvas{z-index:5}
+
+/* ── BOTTOM BAR ── */
+.bottom-bar{grid-column:1/-1;background:var(--panel);border-top:1px solid var(--border);
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}
+.chart-panel{background:var(--panel);padding:10px 14px;position:relative;overflow:hidden}
+.chart-panel canvas{display:block}
+.chart-label{font-family:var(--font-data);font-size:.65rem;color:var(--text3);
+  text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px}
+
+/* ── HUD WIDGETS ── */
+.hud-section{background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:10px}
+.hud-title{font-family:var(--font-hud);font-size:.62rem;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--glow);margin-bottom:8px;
+  border-bottom:1px solid var(--border);padding-bottom:5px}
+
+.btn{width:100%;padding:8px;border-radius:5px;border:none;cursor:pointer;
+  font-family:var(--font-hud);font-size:.65rem;font-weight:700;letter-spacing:.08em;
+  transition:all .15s;margin-bottom:4px;text-transform:uppercase}
+.btn:last-child{margin-bottom:0}
+.btn-primary{background:linear-gradient(135deg,var(--rl),#c91a3c);color:#fff;
+  box-shadow:0 0 16px rgba(255,45,85,.3)}
+.btn-primary:hover{box-shadow:0 0 24px rgba(255,45,85,.5);transform:translateY(-1px)}
+.btn-secondary{background:var(--panel3);border:1px solid var(--border2);color:var(--text2)}
+.btn-secondary:hover{background:var(--panel2);color:var(--text);border-color:var(--glow2)}
+.btn-warn{background:var(--panel3);border:1px solid var(--debris);color:var(--debris)}
+.btn-warn:hover{background:rgba(255,69,58,.1)}
+
+.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px}
+.mode-btn{padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--panel);
+  color:var(--text3);font-family:var(--font-data);font-size:.65rem;cursor:pointer;
+  transition:all .15s;text-align:center}
+.mode-btn.active{border-color:var(--glow);color:var(--glow);background:rgba(0,255,224,.06)}
+.mode-btn:hover:not(.active){border-color:var(--border2);color:var(--text2)}
+
+.algo-list{display:flex;flex-direction:column;gap:4px}
+.algo-item{display:flex;align-items:center;gap:7px;padding:6px 8px;
+  border:1px solid var(--border);border-radius:4px;cursor:pointer;transition:all .15s}
+.algo-item:hover{border-color:var(--border2)}
+.algo-item.active{background:rgba(0,255,224,.04)}
+.algo-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.algo-name{font-family:var(--font-data);font-size:.68rem;color:var(--text2);flex:1}
+.algo-score{font-family:var(--font-hud);font-size:.7rem;font-weight:700}
+
+.slider-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.slider-label{font-family:var(--font-data);font-size:.65rem;color:var(--text3);width:80px}
+.slider-val{font-family:var(--font-hud);font-size:.7rem;color:var(--glow);width:28px;text-align:right}
+input[type=range]{flex:1;accent-color:var(--glow);height:3px}
+
+.metric-row{display:flex;justify-content:space-between;align-items:center;
+  padding:4px 0;border-bottom:1px solid var(--border)}
+.metric-row:last-child{border-bottom:none}
+.metric-key{font-family:var(--font-data);font-size:.65rem;color:var(--text3)}
+.metric-val{font-family:var(--font-hud);font-size:.72rem;font-weight:700}
+
+/* ── DRONE INFO ── */
+.drone-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px;max-height:140px;overflow-y:auto}
+.drone-chip{padding:4px 6px;background:var(--panel3);border-radius:3px;
+  border-left:2px solid var(--rl);font-family:var(--font-data);font-size:.6rem}
+.drone-chip.dead{border-color:var(--text3);opacity:.4}
+.drone-chip .dc-id{color:var(--text3)}
+.drone-chip .dc-bat{color:var(--survivor)}
+
+/* ── SURVIVOR TRACKER ── */
+.surv-list{display:flex;flex-direction:column;gap:3px}
+.surv-item{display:flex;align-items:center;gap:6px;padding:4px 8px;
+  border-radius:4px;background:var(--panel3);font-family:var(--font-data);font-size:.65rem}
+.surv-item.found{background:rgba(255,214,10,.06);border:1px solid rgba(255,214,10,.3)}
+.surv-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.surv-dot.found{background:var(--survivor);box-shadow:0 0 6px var(--survivor)}
+.surv-dot.searching{background:var(--text3);animation:pulse2 2s infinite}
+@keyframes pulse2{0%,100%{opacity:.4}50%{opacity:1}}
+.surv-label{color:var(--text2);flex:1}
+.surv-step{color:var(--text3)}
+
+/* ── TOOLTIP ── */
+#tooltip{position:fixed;background:var(--panel3);border:1px solid var(--border2);
+  border-radius:5px;padding:6px 10px;font-family:var(--font-data);font-size:.68rem;
+  color:var(--text);pointer-events:none;z-index:10000;display:none}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--panel)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+
+/* ── CORNER DECORATION ── */
+.corner-decor{position:absolute;width:12px;height:12px;pointer-events:none}
+.corner-decor.tl{top:0;left:0;border-top:1px solid var(--glow);border-left:1px solid var(--glow)}
+.corner-decor.tr{top:0;right:0;border-top:1px solid var(--glow);border-right:1px solid var(--glow)}
+.corner-decor.bl{bottom:0;left:0;border-bottom:1px solid var(--glow);border-left:1px solid var(--glow)}
+.corner-decor.br{bottom:0;right:0;border-bottom:1px solid var(--glow);border-right:1px solid var(--glow)}
+
+.fps-counter{position:absolute;top:8px;right:8px;font-family:var(--font-data);
+  font-size:.6rem;color:var(--text3);z-index:20;pointer-events:none}
+
+/* ── FLOOR TABS ── */
+.floor-tabs{display:flex;gap:2px;margin-bottom:6px}
+.floor-tab{flex:1;padding:4px;background:var(--panel);border:1px solid var(--border);
+  border-radius:3px;font-family:var(--font-data);font-size:.62rem;color:var(--text3);
+  cursor:pointer;text-align:center;transition:all .15s}
+.floor-tab.active{background:rgba(0,255,224,.08);border-color:var(--glow);color:var(--glow)}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- ══ TOP BAR ══ -->
+<div class="topbar">
+  <div>
+    <div class="brand">DRONE SWARM CONTROL</div>
+    <div class="mission-id">AH-ACO-RL · SEARCH & RESCUE · GPS-DENIED</div>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="status-pill"><div class="sdot" id="main-dot"></div><span id="main-status">STANDBY</span></div>
+  <div class="top-stat" style="border-left:none">
+    <div class="top-stat-val" id="ts-step" style="color:var(--glow)">0</div>
+    <div class="top-stat-label">Step</div>
+  </div>
+  <div class="top-stat">
+    <div class="top-stat-val" id="ts-coverage" style="color:var(--as)">0%</div>
+    <div class="top-stat-label">Coverage</div>
+  </div>
+  <div class="top-stat">
+    <div class="top-stat-val" id="ts-survivors" style="color:var(--survivor)">0/8</div>
+    <div class="top-stat-label">Survivors</div>
+  </div>
+  <div class="top-stat">
+    <div class="top-stat-val" id="ts-drones" style="color:var(--rl)">0</div>
+    <div class="top-stat-label">Active Drones</div>
+  </div>
+  <div class="top-stat">
+    <div class="top-stat-val" id="ts-coll" style="color:var(--debris)">0</div>
+    <div class="top-stat-label">Collisions</div>
+  </div>
+</div>
+
+<!-- ══ LEFT PANEL ══ -->
+<div class="left-panel">
+
+  <div class="hud-section">
+    <div class="hud-title">Mission Control</div>
+    <button class="btn btn-primary" onclick="startSim()">▶ LAUNCH MISSION</button>
+    <button class="btn btn-secondary" onclick="pauseSim()">⏸ PAUSE / RESUME</button>
+    <button class="btn btn-secondary" onclick="resetSim()">↺ RESET</button>
+    <button class="btn btn-warn" onclick="dropDebris()">💥 DROP DEBRIS</button>
+  </div>
+
+  <div class="hud-section">
+    <div class="hud-title">Edit Building</div>
+    <div class="mode-grid">
+      <div class="mode-btn active" id="mode-wall"    onclick="setMode('wall')">WALL</div>
+      <div class="mode-btn"        id="mode-erase"   onclick="setMode('erase')">ERASE</div>
+      <div class="mode-btn"        id="mode-survivor" onclick="setMode('survivor')">SURVIVOR</div>
+      <div class="mode-btn"        id="mode-entry"   onclick="setMode('entry')">ENTRY</div>
+    </div>
+    <div class="floor-tabs" id="floor-tabs">
+      <div class="floor-tab active" onclick="setFloor(0)">F1</div>
+      <div class="floor-tab" onclick="setFloor(1)">F2</div>
+      <div class="floor-tab" onclick="setFloor(2)">F3</div>
+      <div class="floor-tab" onclick="setFloor(3)">F4</div>
+    </div>
+    <button class="btn btn-secondary" onclick="loadPreset('collapsed')">Load: Collapsed</button>
+    <button class="btn btn-secondary" onclick="loadPreset('warehouse')">Load: Warehouse</button>
+    <button class="btn btn-secondary" onclick="loadPreset('open')">Load: Open Space</button>
+  </div>
+
+  <div class="hud-section">
+    <div class="hud-title">Parameters</div>
+    <div class="slider-row">
+      <span class="slider-label">Drones</span>
+      <input type="range" min="5" max="40" value="20" id="sl-drones" oninput="updateSlider('drones',this.value)">
+      <span class="slider-val" id="sv-drones">20</span>
+    </div>
+    <div class="slider-row">
+      <span class="slider-label">Speed</span>
+      <input type="range" min="1" max="10" value="4" id="sl-speed" oninput="updateSlider('speed',this.value)">
+      <span class="slider-val" id="sv-speed">4</span>
+    </div>
+    <div class="slider-row">
+      <span class="slider-label">λ (RL mix)</span>
+      <input type="range" min="0" max="10" value="4" id="sl-lam" oninput="updateSlider('lam',this.value)">
+      <span class="slider-val" id="sv-lam">0.4</span>
+    </div>
+    <div class="slider-row">
+      <span class="slider-label">Battery</span>
+      <input type="range" min="100" max="500" value="200" step="50" id="sl-batt" oninput="updateSlider('batt',this.value)">
+      <span class="slider-val" id="sv-batt">200</span>
+    </div>
+  </div>
+
+  <div class="hud-section">
+    <div class="hud-title">View</div>
+    <div class="slider-row">
+      <span class="slider-label">Show Floor</span>
+      <div class="floor-tabs" style="flex:1;margin-bottom:0" id="view-tabs">
+        <div class="floor-tab active" onclick="setViewFloor(0)">F1</div>
+        <div class="floor-tab" onclick="setViewFloor(1)">F2</div>
+        <div class="floor-tab" onclick="setViewFloor(2)">F3</div>
+        <div class="floor-tab" onclick="setViewFloor(3)">F4</div>
+        <div class="floor-tab" onclick="setViewFloor(-1)">ALL</div>
+      </div>
+    </div>
+    <div class="mode-grid">
+      <div class="mode-btn active" id="vopt-phero" onclick="toggleView('phero')">PHEROMONE</div>
+      <div class="mode-btn active" id="vopt-trails" onclick="toggleView('trails')">TRAILS</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ CANVAS AREA ══ -->
+<div class="canvas-area" id="canvas-area">
+  <canvas id="bg-canvas"></canvas>
+  <canvas id="grid-canvas"></canvas>
+  <canvas id="phero-canvas"></canvas>
+  <canvas id="drone-canvas"></canvas>
+  <canvas id="ui-canvas"></canvas>
+  <div class="corner-decor tl"></div>
+  <div class="corner-decor tr"></div>
+  <div class="corner-decor bl"></div>
+  <div class="corner-decor br"></div>
+  <div class="fps-counter" id="fps-display">-- FPS</div>
+</div>
+
+<!-- ══ RIGHT PANEL ══ -->
+<div class="right-panel">
+
+  <div class="hud-section">
+    <div class="hud-title">Algorithm Compare</div>
+    <div class="algo-list" id="algo-list">
+      <div class="algo-item active" data-algo="rl">
+        <div class="algo-dot" style="background:#ff2d55"></div>
+        <span class="algo-name">AH-ACO-RL ★</span>
+        <span class="algo-score" style="color:#ff2d55" id="score-rl">—</span>
+      </div>
+      <div class="algo-item" data-algo="as">
+        <div class="algo-dot" style="background:#007aff"></div>
+        <span class="algo-name">ACO-AS</span>
+        <span class="algo-score" style="color:#007aff" id="score-as">—</span>
+      </div>
+      <div class="algo-item" data-algo="rw">
+        <div class="algo-dot" style="background:#ff9f0a"></div>
+        <span class="algo-name">Random Walk</span>
+        <span class="algo-score" style="color:#ff9f0a" id="score-rw">—</span>
+      </div>
+    </div>
+    <div style="margin-top:8px">
+      <button class="btn btn-secondary" onclick="runComparison()">⚡ RUN ALL 3</button>
+    </div>
+  </div>
+
+  <div class="hud-section">
+    <div class="hud-title">Live Metrics</div>
+    <div class="metric-row">
+      <span class="metric-key">Coverage</span>
+      <span class="metric-val" id="m-coverage" style="color:var(--as)">0%</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-key">Survivors Found</span>
+      <span class="metric-val" id="m-survivors" style="color:var(--survivor)">0 / 8</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-key">Collisions</span>
+      <span class="metric-val" id="m-coll" style="color:var(--debris)">0</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-key">Avg Battery</span>
+      <span class="metric-val" id="m-batt" style="color:var(--glow)">100%</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-key">Alive Drones</span>
+      <span class="metric-val" id="m-alive" style="color:var(--rl)">0</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-key">Debris Events</span>
+      <span class="metric-val" id="m-debris" style="color:var(--debris)">0</span>
+    </div>
+  </div>
+
+  <div class="hud-section">
+    <div class="hud-title">Survivor Tracker</div>
+    <div class="surv-list" id="surv-list"></div>
+  </div>
+
+  <div class="hud-section">
+    <div class="hud-title">Drone Fleet</div>
+    <div class="drone-grid" id="drone-grid"></div>
+  </div>
+
+</div>
+
+<!-- ══ BOTTOM CHARTS ══ -->
+<div class="bottom-bar">
+  <div class="chart-panel">
+    <div class="chart-label">Coverage Over Time</div>
+    <canvas id="chart-cov" height="100"></canvas>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-label">Survivors Found</div>
+    <canvas id="chart-surv" height="100"></canvas>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-label">Collision Rate</div>
+    <canvas id="chart-coll" height="100"></canvas>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-label">Swarm Battery Avg</div>
+    <canvas id="chart-batt" height="100"></canvas>
+  </div>
+</div>
+
+</div><!-- .app -->
+<div id="tooltip"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════
+const GX=25,GY=25,GZ=4;
+const CELL=24; // pixels per cell
+const PAL={rl:'#ff2d55',as:'#007aff',rw:'#ff9f0a',ar:'#30d158',hp:'#bf5af2'};
+const CELL_EMPTY=0,CELL_WALL=1,CELL_DEBRIS=2,CELL_SMOKE=3;
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+let grid;          // Int8Array [GX][GY][GZ]
+let survivors;     // [{x,y,z,found,foundStep}]
+let entries;       // [{x,y,z}]
+let drones;        // Drone[]
+let pheromone;     // Float32Array [GX][GY][GZ]
+let dangerMap;     // Float32Array [GX][GY][GZ]
+let explored;      // Uint8Array  [GX][GY][GZ]
+let Q_table;       // Map key->(Map key->float)
+let step=0, running=false, paused=false;
+let editMode='wall', editFloor=0, viewFloor=-1;
+let showPhero=true, showTrails=true;
+let debrisCount=0, collisionCount=0;
+let simSpeed=4;
+let N_DRONES=20, BATT_MAX=200, LAM_TARGET=0.4;
+let rafId=null, lastFps=0, frameCount=0, lastFpsTime=0;
+let chartData={cov:[],surv:[],coll:[],batt:[]};
+let isDrawing=false;
+
+// Seeded RNG
+let rngSeed=42;
+function srng(){ rngSeed=(1664525*rngSeed+1013904223)>>>0; return rngSeed/4294967296; }
+
+// ═══════════════════════════════════════════════════════════════════
+// CANVAS SETUP
+// ═══════════════════════════════════════════════════════════════════
+const bgC=document.getElementById('bg-canvas');
+const gridC=document.getElementById('grid-canvas');
+const pheroC=document.getElementById('phero-canvas');
+const droneC=document.getElementById('drone-canvas');
+const uiC=document.getElementById('ui-canvas');
+const ctxs={bg:bgC.getContext('2d'),grid:gridC.getContext('2d'),
+            phero:pheroC.getContext('2d'),drone:droneC.getContext('2d'),
+            ui:uiC.getContext('2d')};
+
+function resizeCanvases(){
+  const area=document.getElementById('canvas-area');
+  const W=area.clientWidth, H=area.clientHeight;
+  [bgC,gridC,pheroC,droneC,uiC].forEach(c=>{c.width=W;c.height=H;});
+  drawBackground();
+  drawGrid();
+}
+
+const OFFSET_X=20, OFFSET_Y=20;
+function cellX(c){ return OFFSET_X+c*CELL; }
+function cellY(r){ return OFFSET_Y+r*CELL; }
+function canvasW(){ return bgC.width; }
+function canvasH(){ return bgC.height; }
+
+// ═══════════════════════════════════════════════════════════════════
+// BUILDING GENERATION
+// ═══════════════════════════════════════════════════════════════════
+function initArrays(){
+  grid=new Int8Array(GX*GY*GZ);
+  pheromone=new Float32Array(GX*GY*GZ).fill(0.1);
+  dangerMap=new Float32Array(GX*GY*GZ);
+  explored=new Uint8Array(GX*GY*GZ);
+  Q_table=new Map();
+}
+function gi(x,y,z){ return z*GX*GY+y*GX+x; }
+function gget(x,y,z){ return grid[gi(x,y,z)]; }
+function gset(x,y,z,v){ grid[gi(x,y,z)]=v; }
+function passable(x,y,z){
+  if(x<0||x>=GX||y<0||y>=GY||z<0||z>=GZ) return false;
+  const v=gget(x,y,z); return v===CELL_EMPTY||v===CELL_SMOKE;
+}
+function nbrs3(x,y,z){
+  const out=[];
+  for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++) for(let dz=-1;dz<=1;dz++){
+    if(!dx&&!dy&&!dz) continue;
+    if(passable(x+dx,y+dy,z+dz)) out.push([x+dx,y+dy,z+dz]);
+  }
+  return out;
+}
+
+function generateBuilding(preset='collapsed'){
+  rngSeed=42; initArrays();
+  survivors=[]; entries=[];
+  if(preset==='collapsed') genCollapsed();
+  else if(preset==='warehouse') genWarehouse();
+  else genOpen();
+  placeEntries(); placeSurvivors(8);
+  warmStartQ();
+}
+
+function genCollapsed(){
+  // Rubble piles
+  for(let i=0;i<15;i++){
+    const cx=Math.floor(srng()*GX), cy=Math.floor(srng()*GY);
+    for(let dx=-2;dx<=2;dx++) for(let dy=-2;dy<=2;dy++){
+      if(srng()<0.5){
+        const z=Math.floor(srng()*2);
+        if(cx+dx>=0&&cx+dx<GX&&cy+dy>=0&&cy+dy<GY) gset(cx+dx,cy+dy,z,CELL_WALL);
+      }
+    }
+  }
+  // Walls
+  for(let i=0;i<10;i++){
+    const x=Math.floor(srng()*(GX-4))+2, y=Math.floor(srng()*(GY-4))+2;
+    const horiz=srng()<0.5, len=Math.floor(srng()*7)+3;
+    const z=Math.floor(srng()*GZ);
+    for(let j=0;j<len;j++){
+      const wx=horiz?x+j:x, wy=horiz?y:y+j;
+      if(wx>=0&&wx<GX&&wy>=0&&wy<GY) gset(wx,wy,z,CELL_WALL);
+    }
+  }
+  // Smoke zones
+  for(let i=0;i<3;i++){
+    const cx=Math.floor(srng()*GX), cy=Math.floor(srng()*GY), cz=Math.floor(srng()*GZ);
+    for(let dx=-2;dx<=2;dx++) for(let dy=-2;dy<=2;dy++){
+      const wx=cx+dx, wy=cy+dy;
+      if(wx>=0&&wx<GX&&wy>=0&&wy<GY&&gget(wx,wy,cz)===CELL_EMPTY) gset(wx,wy,cz,CELL_SMOKE);
+    }
+  }
+}
+
+function genWarehouse(){
+  // Aisles
+  for(let x=4;x<GX;x+=5){
+    for(let y=0;y<GY;y++) for(let z=0;z<2;z++) gset(x,y,z,CELL_WALL);
+  }
+  for(let y=4;y<GY;y+=5){
+    for(let x=0;x<GX;x++) gset(x,y,0,CELL_WALL);
+  }
+  // Gaps in walls
+  for(let i=0;i<15;i++){
+    const wx=Math.floor(srng()*GX), wy=Math.floor(srng()*GY), wz=Math.floor(srng()*GZ);
+    gset(wx,wy,wz,CELL_EMPTY);
+  }
+}
+
+function genOpen(){
+  // Minimal obstacles
+  for(let i=0;i<8;i++){
+    const x=Math.floor(srng()*GX), y=Math.floor(srng()*GY), z=Math.floor(srng()*GZ);
+    gset(x,y,z,CELL_WALL);
+  }
+}
+
+function placeEntries(){
+  entries=[];
+  const eps=[[0,0,0],[0,Math.floor(GY/2),0],[0,GY-1,0]];
+  for(const [x,y,z] of eps){
+    gset(x,y,z,CELL_EMPTY);
+    if(x+1<GX) gset(x+1,y,z,CELL_EMPTY);
+    entries.push({x,y,z});
+  }
+}
+
+function placeSurvivors(n){
+  survivors=[];
+  let tries=0;
+  while(survivors.length<n&&tries<500){
+    const x=Math.floor(srng()*(GX-3))+2, y=Math.floor(srng()*(GY-3))+2;
+    const z=Math.floor(srng()*GZ);
+    if(passable(x,y,z)) survivors.push({x,y,z,found:false,foundStep:-1});
+    tries++;
+  }
+  updateSurvList();
+}
+
+function warmStartQ(){
+  // Pre-seed Q with distance-to-centre heuristic
+  for(let x=0;x<GX;x++) for(let y=0;y<GY;y++) for(let z=0;z<GZ;z++){
+    if(!passable(x,y,z)) continue;
+    const k=`${x},${y},${z}`; const nbs=nbrs3(x,y,z);
+    const qmap=new Map();
+    for(const [nx,ny,nz] of nbs){
+      const unexplored=explored[gi(nx,ny,nz)]===0?2.0:0.5;
+      const dist=Math.sqrt((nx-GX/2)**2+(ny-GY/2)**2)*0.1;
+      qmap.set(`${nx},${ny},${nz}`, unexplored/(dist+0.5));
+    }
+    Q_table.set(k,qmap);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DRONE CLASS
+// ═══════════════════════════════════════════════════════════════════
+class Drone{
+  constructor(id,x,y,z,algo='rl'){
+    this.id=id; this.x=x; this.y=y; this.z=z; this.algo=algo;
+    this.px=x; this.py=y; this.pz=z; // previous for animation
+    this.vx=0; this.vy=0;            // visual velocity
+    this.battery=BATT_MAX; this.alive=true; this.collisions=0;
+    this.tabu=new Array(20).fill(null); this.tabuPtr=0;
+    this.trail=[{x,y,z}]; this.maxTrail=30;
+    this.color=algo==='rl'?PAL.rl:algo==='as'?PAL.as:PAL.rw;
+    this.lam=0; this.angle=0; this.bobPhase=Math.random()*Math.PI*2;
+    this.flash=0;
+  }
+
+  tabuHas(x,y,z){
+    for(let i=0;i<this.tabu.length;i++) if(this.tabu[i]&&this.tabu[i][0]===x&&this.tabu[i][1]===y&&this.tabu[i][2]===z) return true;
+    return false;
+  }
+  tabuAdd(x,y,z){ this.tabu[this.tabuPtr%20]=[x,y,z]; this.tabuPtr++; }
+
+  move(nx,ny,nz,occupiedSet){
+    if(!this.alive||this.battery<=0) return false;
+    if(!passable(nx,ny,nz)){this.collisions++;collisionCount++;this.flash=8;return false;}
+    const nk=`${nx},${ny},${nz}`;
+    if(occupiedSet.has(nk)&&this.algo!=='rw'){this.collisions++;collisionCount++;this.flash=8;return false;}
+    const dx=Math.abs(nx-this.x),dy=Math.abs(ny-this.y),dz=Math.abs(nz-this.z);
+    const cost=Math.sqrt(dx*dx+dy*dy+dz*dz);
+    const smokeMul=gget(nx,ny,nz)===CELL_SMOKE?1.5:1;
+    this.battery-=cost*smokeMul;
+    this.px=this.x; this.py=this.y; this.pz=this.z;
+    this.x=nx; this.y=ny; this.z=nz;
+    this.vx=(nx-this.px)*0.3; this.vy=(ny-this.py)*0.3;
+    if(this.vx!==0||this.vy!==0) this.angle=Math.atan2(this.vy,this.vx);
+    this.tabuAdd(nx,ny,nz);
+    this.trail.push({x:nx,y:ny,z:nz});
+    if(this.trail.length>this.maxTrail) this.trail.shift();
+    explored[gi(nx,ny,nz)]=1;
+    // Check survivors
+    for(const s of survivors){
+      if(!s.found&&Math.sqrt((nx-s.x)**2+(ny-s.y)**2+(nz-s.z)**2)<=2){
+        s.found=true; s.foundStep=step; updateSurvList();
+      }
+    }
+    return true;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ALGORITHM STEP FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════
+function chooseRL(drone, opts){
+  const lam=drone.lam; const n=opts.length;
+  if(n===0) return null;
+  if(n===1) return opts[0];
+  const ck=`${drone.x},${drone.y},${drone.z}`;
+  const qmap=Q_table.get(ck)||new Map();
+  // ACO weights
+  const w=opts.map(([nx,ny,nz])=>{
+    const tau=Math.max(0.01, pheromone[gi(nx,ny,nz)] - dangerMap[gi(nx,ny,nz)]*0.3);
+    const expl=explored[gi(nx,ny,nz)]===0?2.5:0.4;
+    const batFac=0.5+0.5*(drone.battery/BATT_MAX);
+    const danger=Math.max(0.1,1-dangerMap[gi(nx,ny,nz)]*0.3);
+    const h=expl*batFac*danger;
+    return Math.pow(tau,1.0)*Math.pow(h,2.5);
+  });
+  const ws=w.reduce((a,b)=>a+b,0)||1;
+  const pAco=w.map(v=>v/ws);
+  let p=pAco;
+  if(lam>0.01){
+    const ql=opts.map(([nx,ny,nz])=>qmap.get(`${nx},${ny},${nz}`)||0);
+    const mx=Math.max(...ql);
+    const qe=ql.map(v=>Math.exp((v-mx)/1.5));
+    const qs=qe.reduce((a,b)=>a+b,0)||1;
+    const pQl=qe.map(v=>v/qs);
+    p=pAco.map((a,i)=>(1-lam)*a+lam*pQl[i]);
+  }
+  const ps=p.reduce((a,b)=>a+b,0); let r=srng()*ps, cs=0;
+  for(let i=0;i<opts.length;i++){cs+=p[i]; if(r<=cs) return opts[i];}
+  return opts[opts.length-1];
+}
+
+function chooseAS(drone, opts){
+  if(!opts.length) return null;
+  const w=opts.map(([nx,ny,nz])=>{
+    const h=explored[gi(nx,ny,nz)]===0?2:0.4;
+    return Math.pow(pheromone[gi(nx,ny,nz)],1)*Math.pow(h,2.5);
+  });
+  const ws=w.reduce((a,b)=>a+b,0)||1;
+  let r=srng()*ws, cs=0;
+  for(let i=0;i<opts.length;i++){cs+=w[i]; if(r<=cs) return opts[i];}
+  return opts[opts.length-1];
+}
+
+function chooseRW(drone, opts){
+  if(!opts.length) return null;
+  return opts[Math.floor(srng()*opts.length)];
+}
+
+function updateQ(drone,cur,nxt,reward){
+  const ck=`${cur[0]},${cur[1]},${cur[2]}`;
+  const nk=`${nxt[0]},${nxt[1]},${nxt[2]}`;
+  if(!Q_table.has(ck)) Q_table.set(ck,new Map());
+  if(!Q_table.has(nk)) Q_table.set(nk,new Map());
+  const qn=Q_table.get(nk);
+  const fut=qn.size>0?Math.max(...qn.values()):0;
+  const qmap=Q_table.get(ck);
+  const old=qmap.get(nk)||0;
+  qmap.set(nk, old + 0.2*(reward + 0.92*fut - old));
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SIMULATION STEP
+// ═══════════════════════════════════════════════════════════════════
+const WARMUP=()=>Math.max(1,Math.floor(maxSteps()*0.3));
+function maxSteps(){ return 300; }
+
+function simStep(){
+  if(!drones||!drones.length) return;
+  step++;
+  const curLam=LAM_TARGET*Math.min(1,(step+1)/WARMUP());
+  const occupied=new Set(drones.filter(d=>d.alive).map(d=>`${d.x},${d.y},${d.z}`));
+
+  for(const drone of drones){
+    drone.lam=curLam;
+    if(!drone.alive||drone.battery<=0){ drone.alive=false; continue; }
+    const {x,y,z}=drone;
+    const allOpts=nbrs3(x,y,z);
+    const opts=allOpts.filter(([nx,ny,nz])=>!drone.tabuHas(nx,ny,nz)&&passable(nx,ny,nz));
+    const useOpts=opts.length?opts:allOpts.filter(o=>passable(...o));
+    if(!useOpts.length) continue;
+
+    let nxt;
+    const cur=[x,y,z];
+    if(drone.algo==='rl')      nxt=chooseRL(drone,useOpts);
+    else if(drone.algo==='as') nxt=chooseAS(drone,useOpts);
+    else                       nxt=chooseRW(drone,useOpts);
+    if(!nxt) continue;
+
+    // Reward
+    let reward=-1;
+    if(explored[gi(...nxt)]===0) reward=5;
+    if(dangerMap[gi(...nxt)]>1) reward-=dangerMap[gi(...nxt)];
+
+    occupied.delete(`${x},${y},${z}`);
+    if(drone.move(...nxt, occupied)){
+      occupied.add(`${nxt[0]},${nxt[1]},${nxt[2]}`);
+      if(drone.algo==='rl') updateQ(drone,cur,nxt,reward);
+      // Pheromone deposit
+      pheromone[gi(...nxt)]=Math.min(10, pheromone[gi(...nxt)]+0.5);
+    }
+    drone.lam=LAM_TARGET*Math.min(1,(step+1)/WARMUP());
+  }
+
+  // Pheromone evaporation (adaptive)
+  const Ht=calcEntropy();
+  const n_pass=countPassable()||1;
+  const H_MAX=Math.log(n_pass);
+  const ratio=Math.min(1,Ht/H_MAX);
+  const rho=0.35+(0.65-0.35)*(1-ratio);
+  for(let i=0;i<pheromone.length;i++){
+    if(grid[i]!==CELL_WALL) pheromone[i]=Math.max(0.01,Math.min(10,pheromone[i]*(1-rho)));
+  }
+  dangerMap.forEach((_,i)=>{ dangerMap[i]=Math.max(0,dangerMap[i]*0.97); });
+
+  // Diversity restart check
+  const alive=drones.filter(d=>d.alive);
+  if(alive.length>1){
+    const cx=alive.reduce((a,d)=>a+d.x,0)/alive.length;
+    const cy=alive.reduce((a,d)=>a+d.y,0)/alive.length;
+    const spread=alive.reduce((a,d)=>a+Math.hypot(d.x-cx,d.y-cy),0)/alive.length;
+    if(spread<3&&step%20===0){
+      for(let i=0;i<pheromone.length;i++) if(grid[i]!==CELL_WALL) pheromone[i]=pheromone[i]*0.6+0.04;
+    }
+  }
+
+  updateMetrics();
+  recordChart();
+}
+
+function calcEntropy(){
+  let sum=0,n=0;
+  for(let i=0;i<pheromone.length;i++){
+    if(grid[i]!==CELL_WALL){ sum+=pheromone[i]; n++; }
+  }
+  if(!sum||!n) return 0;
+  let H=0;
+  for(let i=0;i<pheromone.length;i++){
+    if(grid[i]!==CELL_WALL){ const p=pheromone[i]/sum; if(p>0) H-=p*Math.log(p); }
+  }
+  return H;
+}
+function countPassable(){ let n=0; for(let i=0;i<grid.length;i++) if(grid[i]===CELL_EMPTY||grid[i]===CELL_SMOKE) n++; return n; }
+
+// ═══════════════════════════════════════════════════════════════════
+// METRICS
+// ═══════════════════════════════════════════════════════════════════
+function updateMetrics(){
+  const total=countPassable();
+  const explCount=explored.reduce((a,v)=>a+v,0);
+  const cov=total?Math.round(explCount/total*100):0;
+  const found=survivors.filter(s=>s.found).length;
+  const alive=drones?drones.filter(d=>d.alive).length:0;
+  const avgBatt=drones&&drones.length?Math.round(drones.filter(d=>d.alive).reduce((a,d)=>a+d.battery/BATT_MAX*100,0)/Math.max(1,alive)):0;
+
+  document.getElementById('ts-step').textContent=step;
+  document.getElementById('ts-coverage').textContent=cov+'%';
+  document.getElementById('ts-survivors').textContent=found+'/'+survivors.length;
+  document.getElementById('ts-drones').textContent=alive;
+  document.getElementById('ts-coll').textContent=collisionCount;
+
+  document.getElementById('m-coverage').textContent=cov+'%';
+  document.getElementById('m-survivors').textContent=found+' / '+survivors.length;
+  document.getElementById('m-coll').textContent=collisionCount;
+  document.getElementById('m-batt').textContent=avgBatt+'%';
+  document.getElementById('m-alive').textContent=alive;
+  document.getElementById('m-debris').textContent=debrisCount;
+
+  document.getElementById('score-rl').textContent=cov+'%';
+
+  // Update drone grid
+  if(drones&&step%5===0) updateDroneGrid();
+}
+
+function updateDroneGrid(){
+  const grid_el=document.getElementById('drone-grid');
+  grid_el.innerHTML=drones.slice(0,20).map(d=>`
+    <div class="drone-chip${d.alive?'':' dead'}">
+      <span class="dc-id">D${d.id.toString().padStart(2,'0')}</span>
+      <span class="dc-bat">${d.alive?Math.round(d.battery/BATT_MAX*100)+'%':'DEAD'}</span>
+    </div>`).join('');
+}
+
+function updateSurvList(){
+  const el=document.getElementById('surv-list');
+  el.innerHTML=survivors.map((s,i)=>`
+    <div class="surv-item${s.found?' found':''}">
+      <div class="surv-dot${s.found?' found':' searching'}"></div>
+      <span class="surv-label">SURVIVOR ${i+1} (${s.x},${s.y},F${s.z+1})</span>
+      <span class="surv-step">${s.found?'@'+s.foundStep:'...'}</span>
+    </div>`).join('');
+}
+
+function recordChart(){
+  const total=countPassable()||1;
+  const explCount=explored.reduce((a,v)=>a+v,0);
+  const found=survivors.filter(s=>s.found).length;
+  const alive=drones?drones.filter(d=>d.alive).length:0;
+  const avgBatt=drones&&drones.length?drones.filter(d=>d.alive).reduce((a,d)=>a+d.battery/BATT_MAX*100,0)/Math.max(1,alive):0;
+  chartData.cov.push(explCount/total*100);
+  chartData.surv.push(found);
+  chartData.coll.push(collisionCount);
+  chartData.batt.push(avgBatt);
+  drawAllCharts();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════════════════════════════════
+function drawBackground(){
+  const ctx=ctxs.bg; const W=canvasW(),H=canvasH();
+  ctx.fillStyle='#070d14'; ctx.fillRect(0,0,W,H);
+  // Grid dots
+  ctx.fillStyle='rgba(26,45,74,0.6)';
+  for(let x=0;x<W;x+=40) for(let y=0;y<H;y+=40){
+    ctx.beginPath(); ctx.arc(x,y,1,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function drawGrid(){
+  const ctx=ctxs.grid; ctx.clearRect(0,0,canvasW(),canvasH());
+  const vf=viewFloor;
+
+  for(let x=0;x<GX;x++){
+    for(let y=0;y<GY;y++){
+      const cx=cellX(x), cy=cellY(y);
+      // Decide which z to show
+      let cellVal=CELL_EMPTY, hasWall=false, isSmoke=false;
+      const floors=vf>=0?[vf]:[0,1,2,3];
+      for(const z of floors){
+        const v=gget(x,y,z);
+        if(v===CELL_WALL||v===CELL_DEBRIS) hasWall=true;
+        if(v===CELL_SMOKE) isSmoke=true;
+      }
+      if(hasWall){ ctx.fillStyle='#0e111a'; ctx.fillRect(cx,cy,CELL,CELL);
+        ctx.strokeStyle='#1a1f2e'; ctx.lineWidth=0.5; ctx.strokeRect(cx+.5,cy+.5,CELL-1,CELL-1);
+      } else if(isSmoke){ ctx.fillStyle='rgba(99,99,102,.35)'; ctx.fillRect(cx,cy,CELL,CELL);
+        ctx.strokeStyle='rgba(99,99,102,.5)'; ctx.lineWidth=0.3; ctx.strokeRect(cx,cy,CELL,CELL);
+      } else {
+        // Shade by exploration
+        const expVal=explored[gi(x,y,floors[0])];
+        ctx.fillStyle=expVal?'rgba(30,48,80,.7)':'rgba(18,28,50,.5)';
+        ctx.fillRect(cx,cy,CELL,CELL);
+        ctx.strokeStyle='rgba(26,45,74,.4)'; ctx.lineWidth=0.3; ctx.strokeRect(cx,cy,CELL,CELL);
+      }
+      // Survivors
+      for(const s of survivors){
+        const sf=vf>=0?vf:0;
+        if(s.x===x&&s.y===y&&(vf<0||s.z===vf)){
+          ctx.fillStyle=s.found?'rgba(255,214,10,.8)':'rgba(255,214,10,.3)';
+          const r=CELL*0.35; ctx.beginPath(); ctx.arc(cx+CELL/2,cy+CELL/2,r,0,Math.PI*2); ctx.fill();
+          if(!s.found){ctx.strokeStyle='#ffd60a';ctx.lineWidth=1.5;ctx.stroke();}
+        }
+      }
+      // Entry markers
+      for(const e of entries){
+        if(e.x===x&&e.y===y&&(vf<0||e.z===vf)){
+          ctx.fillStyle='rgba(255,45,85,.6)';
+          ctx.fillRect(cx+2,cy+2,CELL-4,CELL-4);
+          ctx.strokeStyle='#ff2d55'; ctx.lineWidth=1.5; ctx.strokeRect(cx+2,cy+2,CELL-4,CELL-4);
+          ctx.fillStyle='#ff2d55'; ctx.font=`bold ${Math.floor(CELL*0.38)}px 'Share Tech Mono'`;
+          ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('E',cx+CELL/2,cy+CELL/2);
+        }
+      }
+    }
+  }
+
+  // Damage pulses on danger cells
+  ctx.save();
+  for(let x=0;x<GX;x++) for(let y=0;y<GY;y++) for(let z=0;z<GZ;z++){
+    if(vf>=0&&z!==vf) continue;
+    const d=dangerMap[gi(x,y,z)];
+    if(d>0.5){
+      const alpha=Math.min(0.6,d/8);
+      ctx.fillStyle=`rgba(255,69,58,${alpha})`;
+      ctx.fillRect(cellX(x),cellY(y),CELL,CELL);
+    }
+  }
+  ctx.restore();
+}
+
+function drawPheromone(){
+  if(!showPhero){ctxs.phero.clearRect(0,0,canvasW(),canvasH());return;}
+  const ctx=ctxs.phero; ctx.clearRect(0,0,canvasW(),canvasH());
+  const vf=viewFloor;
+  for(let x=0;x<GX;x++) for(let y=0;y<GY;y++){
+    const floors=vf>=0?[vf]:[0,1,2,3];
+    let maxTau=0;
+    for(const z of floors){
+      if(gget(x,y,z)!==CELL_WALL) maxTau=Math.max(maxTau,pheromone[gi(x,y,z)]);
+    }
+    if(maxTau<=0.11) continue;
+    const t=Math.min(1,maxTau/5);
+    // gradient: blue -> cyan -> yellow -> red
+    let r,g,b;
+    if(t<0.33){r=0;g=Math.floor(t/0.33*180);b=255;}
+    else if(t<0.66){r=Math.floor((t-0.33)/0.33*255);g=180;b=255-Math.floor((t-0.33)/0.33*255);}
+    else{r=255;g=Math.floor((1-t)/0.34*180);b=0;}
+    ctx.fillStyle=`rgba(${r},${g},${b},${t*0.65})`;
+    ctx.fillRect(cellX(x),cellY(y),CELL,CELL);
+  }
+}
+
+// Drone visual constants
+const DRONE_R=CELL*0.38;
+const ROTOR_R=CELL*0.16;
+const ROTOR_POSITIONS=[[-.55,-.55],[.55,-.55],[-.55,.55],[.55,.55]];
+
+function drawDrones(){
+  const ctx=ctxs.drone; ctx.clearRect(0,0,canvasW(),canvasH());
+  if(!drones) return;
+  const t=Date.now()/1000;
+  const vf=viewFloor;
+
+  // Draw trails first
+  if(showTrails){
+    for(const drone of drones){
+      if(!drone.alive||!drone.trail.length) continue;
+      const trail=drone.trail.filter(p=>vf<0||p.z===vf);
+      if(trail.length<2) continue;
+      ctx.beginPath();
+      ctx.strokeStyle=drone.color+'44'; ctx.lineWidth=1.5; ctx.lineCap='round';
+      for(let i=0;i<trail.length;i++){
+        const tx=cellX(trail[i].x)+CELL/2, ty=cellY(trail[i].y)+CELL/2;
+        i===0?ctx.moveTo(tx,ty):ctx.lineTo(tx,ty);
+      }
+      ctx.stroke();
+    }
+  }
+
+  for(const drone of drones){
+    if(vf>=0&&drone.z!==vf) continue;
+    const bx=cellX(drone.x)+CELL/2;
+    const by=cellY(drone.y)+CELL/2;
+    const bob=Math.sin(t*3+drone.bobPhase)*1.5;
+    const cx=bx, cy=by+bob;
+    const alpha=drone.alive?(drone.z===0||(vf<0)?1:0.4):0.2;
+
+    ctx.save(); ctx.globalAlpha=alpha;
+
+    if(!drone.alive){
+      // Wreckage
+      ctx.strokeStyle='#636366'; ctx.lineWidth=1.5;
+      for(let a=0;a<4;a++){
+        ctx.beginPath();
+        ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+Math.cos(a*Math.PI/2+0.4)*DRONE_R*1.2,cy+Math.sin(a*Math.PI/2+0.4)*DRONE_R*1.2);
+        ctx.stroke();
+      }
+      ctx.restore(); continue;
+    }
+
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,.25)';
+    ctx.beginPath(); ctx.ellipse(bx,cellY(drone.y)+CELL-2,DRONE_R*1.1,3,0,0,Math.PI*2); ctx.fill();
+
+    // Rotor glow
+    if(drone.flash>0){
+      ctx.strokeStyle=drone.algo==='rl'?'#ff453a':'#ffd60a';
+      ctx.lineWidth=2; ctx.shadowBlur=12; ctx.shadowColor=ctx.strokeStyle;
+      ctx.beginPath(); ctx.arc(cx,cy,DRONE_R*1.3,0,Math.PI*2); ctx.stroke();
+      ctx.shadowBlur=0; drone.flash--;
+    }
+
+    const rotorAngle=t*8;
+    // Draw rotors
+    for(const [ox,oy] of ROTOR_POSITIONS){
+      const rx=cx+ox*DRONE_R, ry=cy+oy*DRONE_R;
+      // Rotor blur disc
+      ctx.strokeStyle=drone.color+'88'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(rx,ry,ROTOR_R,0,Math.PI*2); ctx.stroke();
+      // Rotor blades
+      ctx.strokeStyle=drone.color+'cc'; ctx.lineWidth=1.5;
+      for(let b=0;b<2;b++){
+        const a=rotorAngle+b*Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(rx+Math.cos(a)*ROTOR_R,ry+Math.sin(a)*ROTOR_R);
+        ctx.lineTo(rx-Math.cos(a)*ROTOR_R,ry-Math.sin(a)*ROTOR_R);
+        ctx.stroke();
+      }
+      // Center hub
+      ctx.fillStyle='#1c1c1e';
+      ctx.beginPath(); ctx.arc(rx,ry,2,0,Math.PI*2); ctx.fill();
+    }
+
+    // Body frame arms
+    ctx.strokeStyle=drone.color; ctx.lineWidth=1.8;
+    for(const [ox,oy] of ROTOR_POSITIONS){
+      ctx.beginPath(); ctx.moveTo(cx,cy);
+      ctx.lineTo(cx+ox*DRONE_R,cy+oy*DRONE_R); ctx.stroke();
+    }
+
+    // Body
+    ctx.fillStyle='#1c1c1e'; ctx.strokeStyle=drone.color; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(cx-5,cy-4,10,8,2); ctx.fill(); ctx.stroke();
+
+    // Direction indicator
+    ctx.fillStyle=drone.color;
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(drone.angle)*7,cy+Math.sin(drone.angle)*7);
+    ctx.arc(cx+Math.cos(drone.angle)*7,cy+Math.sin(drone.angle)*7,2,0,Math.PI*2);
+    ctx.fill();
+
+    // Battery bar
+    const bw=CELL*0.7; const bh=3; const bxp=cx-bw/2; const byp=cy-DRONE_R-7;
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(bxp,byp,bw,bh);
+    const batFrac=Math.max(0,drone.battery/BATT_MAX);
+    ctx.fillStyle=batFrac>0.5?'#30d158':batFrac>0.25?'#ff9f0a':'#ff453a';
+    ctx.fillRect(bxp,byp,bw*batFrac,bh);
+
+    // ID label
+    ctx.fillStyle=drone.color; ctx.font=`700 7px 'Share Tech Mono'`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('D'+drone.id,cx,cy+DRONE_R+9);
+
+    ctx.restore();
+  }
+}
+
+function drawUI(){
+  const ctx=ctxs.ui; ctx.clearRect(0,0,canvasW(),canvasH());
+  const W=canvasW(), H=canvasH();
+
+  // Floor labels
+  ctx.fillStyle='rgba(0,255,224,.4)'; ctx.font=`600 9px 'Orbitron'`;
+  ctx.textAlign='right'; ctx.textBaseline='top';
+  ctx.fillText(`FLOOR ${viewFloor>=0?viewFloor+1:'ALL'} | STEP ${step}`, W-24, 10);
+
+  // Grid border
+  ctx.strokeStyle='rgba(0,255,224,.15)'; ctx.lineWidth=1;
+  ctx.strokeRect(OFFSET_X-1,OFFSET_Y-1,GX*CELL+2,GY*CELL+2);
+
+  // Corner decorations for grid
+  const gx2=OFFSET_X+GX*CELL, gy2=OFFSET_Y+GY*CELL;
+  const dlen=12;
+  [[OFFSET_X,OFFSET_Y,1,1],[gx2,OFFSET_Y,-1,1],[OFFSET_X,gy2,1,-1],[gx2,gy2,-1,-1]].forEach(([px,py,sx,sy])=>{
+    ctx.strokeStyle='rgba(0,255,224,.5)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(px,py+sy*dlen); ctx.lineTo(px,py); ctx.lineTo(px+sx*dlen,py); ctx.stroke();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CHART RENDERING
+// ═══════════════════════════════════════════════════════════════════
+function drawAllCharts(){
+  drawMiniChart('chart-cov',chartData.cov,'#007aff',100,'%');
+  drawMiniChart('chart-surv',chartData.surv,'#ffd60a',survivors.length,'');
+  drawMiniChart('chart-coll',chartData.coll,'#ff453a',null,'');
+  drawMiniChart('chart-batt',chartData.batt,'#00ffe0',100,'%');
+}
+
+function drawMiniChart(id,data,col,maxVal,unit){
+  const canvas=document.getElementById(id);
+  const panel=canvas.parentElement;
+  canvas.width=panel.clientWidth-28; canvas.height=100;
+  const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  if(!data.length) return;
+  const max=maxVal||Math.max(...data,1);
+  const min=0;
+  const n=Math.min(data.length,W);
+  const pts=data.slice(-n);
+
+  // Fill
+  ctx.beginPath();
+  ctx.moveTo(0,H);
+  for(let i=0;i<pts.length;i++){
+    const x=i/(pts.length-1||1)*W;
+    const y=H-(pts[i]-min)/(max-min||1)*(H-8)-4;
+    i===0?ctx.lineTo(x,y):ctx.lineTo(x,y);
+  }
+  ctx.lineTo(W,H); ctx.closePath();
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,col+'44'); grad.addColorStop(1,col+'00');
+  ctx.fillStyle=grad; ctx.fill();
+
+  // Line
+  ctx.beginPath(); ctx.strokeStyle=col; ctx.lineWidth=1.5;
+  for(let i=0;i<pts.length;i++){
+    const x=i/(pts.length-1||1)*W;
+    const y=H-(pts[i]-min)/(max-min||1)*(H-8)-4;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // Current value
+  if(pts.length){
+    const last=pts[pts.length-1];
+    ctx.fillStyle=col; ctx.font=`bold 11px 'Orbitron'`;
+    ctx.textAlign='right'; ctx.textBaseline='bottom';
+    ctx.fillText(Math.round(last)+unit, W-2, H);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════════════════════════════
+let stepsAccum=0;
+function loop(ts){
+  rafId=requestAnimationFrame(loop);
+  // FPS
+  frameCount++;
+  if(ts-lastFpsTime>1000){ lastFps=Math.round(frameCount*1000/(ts-lastFpsTime)); frameCount=0; lastFpsTime=ts; document.getElementById('fps-display').textContent=lastFps+' FPS'; }
+
+  if(running&&!paused){
+    stepsAccum+=simSpeed/60;
+    while(stepsAccum>=1){ simStep(); stepsAccum--; if(step>=maxSteps()){running=false;setStatus('done','MISSION COMPLETE');break;} }
+  }
+
+  drawGrid();
+  drawPheromone();
+  drawDrones();
+  drawUI();
+}
+requestAnimationFrame(loop);
+
+// ═══════════════════════════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════════════════════════
+function setStatus(state,msg){
+  const dot=document.getElementById('main-dot');
+  dot.className='sdot'+(state==='live'?' live':state==='done'?' ok':'');
+  document.getElementById('main-status').textContent=msg.toUpperCase();
+}
+
+function spawnDrones(n,algo='rl'){
+  const spawned=[];
+  rngSeed=42+n;
+  for(let i=0;i<n;i++){
+    const ep=entries[i%entries.length];
+    let x=ep.x+Math.floor((srng()-.5)*3), y=ep.y+Math.floor((srng()-.5)*3);
+    x=Math.max(0,Math.min(GX-1,x)); y=Math.max(0,Math.min(GY-1,y));
+    if(!passable(x,y,ep.z)){ x=ep.x; y=ep.y; }
+    spawned.push(new Drone(i,x,y,ep.z,algo));
+  }
+  return spawned;
+}
+
+function startSim(){
+  if(running&&!paused){ paused=true; setStatus('','PAUSED'); return; }
+  resetState();
+  drones=spawnDrones(N_DRONES,'rl');
+  explored.fill(0); pheromone.fill(0.1); dangerMap.fill(0);
+  warmStartQ();
+  step=0; collisionCount=0; debrisCount=0; chartData={cov:[],surv:[],coll:[],batt:[]};
+  survivors.forEach(s=>{s.found=false;s.foundStep=-1;});
+  updateSurvList(); updateDroneGrid(); updateMetrics();
+  running=true; paused=false;
+  setStatus('live','MISSION ACTIVE');
+}
+
+function pauseSim(){
+  if(!running&&!paused) return;
+  paused=!paused;
+  setStatus(paused?'':'live', paused?'PAUSED':'MISSION ACTIVE');
+}
+
+function resetSim(){
+  running=false; paused=false; step=0; collisionCount=0; debrisCount=0;
+  if(grid) explored.fill(0); if(pheromone) pheromone.fill(0.1); if(dangerMap) dangerMap.fill(0);
+  drones=[]; chartData={cov:[],surv:[],coll:[],batt:[]};
+  survivors.forEach(s=>{s.found=false;s.foundStep=-1;});
+  Q_table.clear(); warmStartQ();
+  updateSurvList(); updateDroneGrid(); updateMetrics();
+  setStatus('','STANDBY');
+}
+function resetState(){ step=0; collisionCount=0; debrisCount=0; }
+
+function dropDebris(){
+  debrisCount++;
+  // Drop debris at a random passable cell
+  rngSeed+=1;
+  let tries=20;
+  while(tries--){
+    const x=Math.floor(srng()*GX), y=Math.floor(srng()*GY), z=Math.floor(srng()*GZ);
+    if(passable(x,y,z)&&gget(x,y,z)!==CELL_WALL){
+      gset(x,y,z,CELL_WALL);
+      dangerMap[gi(x,y,z)]=5;
+      // Kill any drone at this cell
+      if(drones) for(const d of drones) if(d.alive&&d.x===x&&d.y===y&&d.z===z){ d.alive=false; d.flash=15; }
+      break;
+    }
+  }
+  document.getElementById('m-debris').textContent=debrisCount;
+}
+
+function loadPreset(p){ generateBuilding(p); resetSim(); }
+
+function setMode(m){
+  editMode=m;
+  ['wall','erase','survivor','entry'].forEach(id=>{
+    document.getElementById('mode-'+id)?.classList.toggle('active',id===m);
+  });
+}
+function setFloor(z){ editFloor=z; document.querySelectorAll('#floor-tabs .floor-tab').forEach((t,i)=>t.classList.toggle('active',i===z)); }
+function setViewFloor(z){
+  viewFloor=z;
+  document.querySelectorAll('#view-tabs .floor-tab').forEach((t,i)=>t.classList.toggle('active',(z<0?4:z)===i));
+}
+function toggleView(opt){
+  if(opt==='phero') showPhero=!showPhero;
+  else showTrails=!showTrails;
+  document.getElementById('vopt-'+opt)?.classList.toggle('active');
+}
+
+function updateSlider(key,val){
+  document.getElementById('sv-'+key).textContent=key==='lam'?(+val/10).toFixed(1):val;
+  if(key==='drones') N_DRONES=+val;
+  else if(key==='speed') simSpeed=+val;
+  else if(key==='lam') LAM_TARGET=+val/10;
+  else if(key==='batt') BATT_MAX=+val;
+}
+
+// Canvas interaction (draw walls etc.)
+uiC.addEventListener('mousedown',e=>{isDrawing=true;applyPaint(e);});
+uiC.addEventListener('mousemove',e=>{if(isDrawing)applyPaint(e);});
+uiC.addEventListener('mouseup',()=>isDrawing=false);
+uiC.addEventListener('mouseleave',()=>isDrawing=false);
+uiC.addEventListener('contextmenu',e=>{e.preventDefault();setMode('erase');isDrawing=true;applyPaint(e);});
+
+function applyPaint(e){
+  const rect=uiC.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(uiC.width/rect.width);
+  const my=(e.clientY-rect.top)*(uiC.height/rect.height);
+  const cx=Math.floor((mx-OFFSET_X)/CELL), cy=Math.floor((my-OFFSET_Y)/CELL);
+  if(cx<0||cx>=GX||cy<0||cy>=GY) return;
+  const z=editFloor;
+  if(editMode==='wall')      gset(cx,cy,z,CELL_WALL);
+  else if(editMode==='erase') gset(cx,cy,z,CELL_EMPTY);
+  else if(editMode==='survivor'){
+    if(passable(cx,cy,z)){ survivors.push({x:cx,y:cy,z,found:false,foundStep:-1}); updateSurvList(); }
+  }
+  else if(editMode==='entry'){
+    gset(cx,cy,z,CELL_EMPTY);
+    entries.push({x:cx,y:cy,z});
+    if(entries.length>6) entries.shift();
+  }
+}
+
+// Compare all 3 algorithms
+async function runComparison(){
+  const origGrid=grid.slice(); const origSurv=survivors.map(s=>({...s}));
+  const origEntry=entries.map(e=>({...e}));
+  const results={};
+
+  for(const algo of ['rl','as','rw']){
+    grid.set(origGrid); explored.fill(0); pheromone.fill(0.1); dangerMap.fill(0);
+    survivors.forEach((s,i)=>{s.found=origSurv[i].found=false;s.foundStep=-1;});
+    Q_table.clear(); warmStartQ(); rngSeed=42;
+    const tempDrones=spawnDrones(N_DRONES,algo);
+    let tcoll=0, tstep=0;
+    for(let s=0;s<200;s++){
+      tstep=s; step=s;
+      const occ=new Set(tempDrones.filter(d=>d.alive).map(d=>`${d.x},${d.y},${d.z}`));
+      for(const d of tempDrones){
+        if(!d.alive||d.battery<=0){d.alive=false;continue;}
+        const opts=nbrs3(d.x,d.y,d.z).filter(o=>passable(...o));
+        if(!opts.length) continue;
+        let nxt;
+        if(algo==='rl') nxt=chooseRL(d,opts);
+        else if(algo==='as') nxt=chooseAS(d,opts);
+        else nxt=chooseRW(d,opts);
+        if(!nxt) continue;
+        occ.delete(`${d.x},${d.y},${d.z}`);
+        const ok=d.move(...nxt,occ); if(ok) occ.add(`${nxt[0]},${nxt[1]},${nxt[2]}`);
+        if(!ok) tcoll++;
+        pheromone[gi(...nxt)]=Math.min(10,pheromone[gi(...nxt)]+0.4);
+      }
+      const t=countPassable();
+      const e=explored.reduce((a,v)=>a+v,0);
+      if(s===199||tempDrones.every(d=>!d.alive)){
+        const f=survivors.filter(sv=>sv.found).length;
+        results[algo]={cov:Math.round(e/t*100),surv:f,coll:tcoll};
+        break;
+      }
+    }
+  }
+
+  // Restore
+  grid.set(origGrid); explored.fill(0); pheromone.fill(0.1); dangerMap.fill(0);
+  survivors.forEach((s,i)=>{s.found=origSurv[i].found=false;s.foundStep=-1;});
+  updateSurvList();
+
+  // Show results
+  for(const[algo,r] of Object.entries(results)){
+    document.getElementById('score-'+algo).textContent=r.cov+'%';
+  }
+  setStatus('ok',`COMPARE DONE · RL:${results.rl?.cov||0}% AS:${results.as?.cov||0}% RW:${results.rw?.cov||0}%`);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+window.addEventListener('resize',()=>{ resizeCanvases(); });
+
+generateBuilding('collapsed');
+resizeCanvases();
+drawBackground();
+updateMetrics();
+updateSurvList();
+setStatus('','STANDBY — PRESS LAUNCH');
+</script>
+</body>
+</html>
